@@ -837,6 +837,10 @@ static unsigned long cackey_getversion(void) {
 }
 
 /* PC/SC Related Functions */
+static cackey_ret cackey_login_required(struct cackey_slot *slot) {
+	return(CACKEY_PCSC_E_NEEDLOGIN);
+}
+
 /*
  * SYNPOSIS
  *     void cackey_slots_disconnect_all(void);
@@ -1006,7 +1010,7 @@ static cackey_ret cackey_pcsc_disconnect(void) {
  *     void cackey_mark_slot_reset(struct cackey_slot *slot);
  *
  * ARGUMENTS
- *     None
+ *     ...
  *
  * RETURN VALUE
  *     None
@@ -1017,6 +1021,8 @@ static cackey_ret cackey_pcsc_disconnect(void) {
  *
  */
 static void cackey_mark_slot_reset(struct cackey_slot *slot) {
+	int login_required = -1;
+
 	if (slot == NULL) {
 		return;
 	}
@@ -1029,7 +1035,19 @@ static void cackey_mark_slot_reset(struct cackey_slot *slot) {
 
 	slot->slot_reset = 1;
 	slot->pcsc_card_connected = 0;
-	slot->token_flags = CKF_LOGIN_REQUIRED;
+	slot->token_flags = 0;
+
+	if (login_required == -1) {
+		if (cackey_login_required(slot) != CACKEY_PCSC_S_OK) {
+			login_required = 1;
+		} else {
+			login_required = 0;
+		}
+	}
+
+	if (login_required) {
+		slot->token_flags |= CKF_LOGIN_REQUIRED;
+	}
 
 	CACKEY_DEBUG_PRINTF("Returning.");
 
@@ -2398,7 +2416,6 @@ static ssize_t cackey_signdecrypt(struct cackey_slot *slot, struct cackey_identi
 				CACKEY_DEBUG_PRINTF("Security status not satisified.  Returning NEEDLOGIN");
 
 				cackey_mark_slot_reset(slot);
-				slot->token_flags = CKF_LOGIN_REQUIRED;
 
 				return(CACKEY_PCSC_E_NEEDLOGIN);
 			}
@@ -2407,7 +2424,6 @@ static ssize_t cackey_signdecrypt(struct cackey_slot *slot, struct cackey_identi
 				CACKEY_DEBUG_PRINTF("Token absent.  Returning TOKENABSENT");
 
 				cackey_mark_slot_reset(slot);
-				slot->token_flags = CKF_LOGIN_REQUIRED;
 
 				return(CACKEY_PCSC_E_TOKENABSENT);
 			}
@@ -3736,8 +3752,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetSlotList)(CK_BBOOL tokenPresent, CK_SLOT_ID_PTR p
 						cackey_slots[currslot].pcsc_card_connected = 0;
 						cackey_slots[currslot].transaction_depth = 0;
 						cackey_slots[currslot].transaction_need_hw_lock = 0;
-						cackey_slots[currslot].slot_reset = 1;
-						cackey_slots[currslot].token_flags = CKF_LOGIN_REQUIRED;
+						cackey_slots[currslot].token_flags = 0;
 						cackey_slots[currslot].label = NULL;
 
 						cackey_mark_slot_reset(&cackey_slots[currslot]);
