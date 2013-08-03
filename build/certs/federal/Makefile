@@ -38,8 +38,11 @@ cert-%.crt: root_sia.p7b caCertsIssuedTofcpca.p7c
 USG-federal-bundle.pem: certs
 	../build-tree.sh > "$@"
 
+USG-federal-bundle.pk7: USG-federal-bundle.pem
+	openssl crl2pkcs7 -outform der -nocrl -certfile USG-federal-bundle.pem > USG-federal-bundle.pk7
+
 clean:
-	rm -f cert-*.crt USG-federal-bundle.pem
+	rm -f cert-*.crt USG-federal-bundle.pem USG-federal-bundle.pk7
 	rm -f CPCA_TRCA.crt.new root_sia.p7b.new caCertsIssuedTofcpca.p7c.new CommonPolicy.crt.new
 
 distclean: clean
