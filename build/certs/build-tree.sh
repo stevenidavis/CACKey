@@ -98,6 +98,7 @@ done | while read cert; do
 			echo "cat << \_EOF_ > '${s_filename}'"
 			openssl x509 -in "${cert}"
 			echo "_EOF_"
+			echo "# NetScaler: link ssl certKey '${s_shortsubject} ${s_idx}' '${i_shortsubject} ${i_idx}'"
 			;;
 	esac
 done
