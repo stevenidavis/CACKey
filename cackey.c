@@ -4737,6 +4737,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_WaitForSlotEvent)(CK_FLAGS flags, CK_SLOT_ID_PTR pSl
 	struct cackey_slot *cackey_slot;
 	unsigned int currslot, reader_state_slot;
 	int pcsc_connect_ret;
+	int slot_changed;
 
 	CACKEY_DEBUG_PRINTF("Called.");
 
@@ -4765,81 +4766,96 @@ CK_DEFINE_FUNCTION(CK_RV, C_WaitForSlotEvent)(CK_FLAGS flags, CK_SLOT_ID_PTR pSl
 		return(CKR_GENERAL_ERROR);
 	}
 
-	if ((flags & CKF_DONT_BLOCK) == CKF_DONT_BLOCK) {
-		/* XXX TODO */
-		CACKEY_DEBUG_PRINTF("Returning CKR_GENERAL_ERROR (%i) because we were asked to not block", CKR_GENERAL_ERROR);
+	for (reader_state_slot = currslot = 0; currslot < (sizeof(cackey_slots) / sizeof(cackey_slots[0])); currslot++) {
+		if (cackey_slots[currslot].internal) {
+			continue;
+		}
 
-		return(CKR_GENERAL_ERROR);
-	} else {
-		for (reader_state_slot = currslot = 0; currslot < (sizeof(cackey_slots) / sizeof(cackey_slots[0])); currslot++) {
-			if (cackey_slots[currslot].internal) {
-				continue;
-			}
+		if (cackey_slots[currslot].active == 0) {
+			continue;
+		}
 
-			if (cackey_slots[currslot].active == 0) {
-				continue;
-			}
+		reader_states[reader_state_slot].szReader = cackey_slots[currslot].pcsc_reader;
+		reader_states[reader_state_slot].pvUserData = &cackey_slots[currslot];
 
-			reader_states[reader_state_slot].szReader = cackey_slots[currslot].pcsc_reader;
-			reader_states[reader_state_slot].pvUserData = &cackey_slots[currslot];
-
+		if ((flags & CKF_DONT_BLOCK) == CKF_DONT_BLOCK) {
+			reader_states[reader_state_slot].dwCurrentState = SCARD_STATE_UNAWARE;
+		} else {
 			reader_states[reader_state_slot].dwCurrentState = cackey_slots[currslot].pcsc_state;
-
-			reader_state_slot++;
 		}
 
-		reader_states[reader_state_slot].szReader = "\\\\?PnP?\\Notification";
-		reader_states[reader_state_slot].pvUserData = NULL;
-		reader_states[reader_state_slot].dwCurrentState = SCARD_STATE_UNAWARE;
 		reader_state_slot++;
-
-		scard_est_context_ret = SCardEstablishContext(SCARD_SCOPE_SYSTEM, NULL, NULL, &pcsc_handle);
-		if (scard_est_context_ret != SCARD_S_SUCCESS) {
-			CACKEY_DEBUG_PRINTF("Returning CKR_GENERAL_ERROR (%i) because SCardEstablishContext failed: %lx", CKR_GENERAL_ERROR, scard_est_context_ret);
-
-			return(CKR_GENERAL_ERROR);
-		}
-
-		scard_getstatchng_ret = SCardGetStatusChange(pcsc_handle, INFINITE, reader_states, reader_state_slot);
-
-		SCardReleaseContext(pcsc_handle);
-
-		if (scard_getstatchng_ret != SCARD_S_SUCCESS) {
-			CACKEY_DEBUG_PRINTF("Returning CKR_GENERAL_ERROR (%i) because SCardGetStatusChange failed: %lx", CKR_GENERAL_ERROR, scard_getstatchng_ret);
-
-			return(CKR_GENERAL_ERROR);
-		}
-
-		for (currslot = 0; currslot < reader_state_slot; currslot++) {
-			CACKEY_DEBUG_PRINTF("[slot = %u] CurrentState = %lx, EventState = %lx",
-			    currslot,
-			    reader_states[currslot].dwCurrentState & 0xffff,
-			    reader_states[currslot].dwEventState & 0xffff
-			);
-
-			if (reader_states[currslot].dwCurrentState != reader_states[currslot].dwEventState) {
-				cackey_slot = (struct cackey_slot *) reader_states[currslot].pvUserData;
-
-				if (cackey_slot == NULL) {
-					/* XXX: TODO: Someone plugged in a new slot */
-					continue;
-				}
-
-				CACKEY_DEBUG_PRINTF("Returning slot changed: %u", (unsigned int) cackey_slot->id);
-
-				cackey_slot->pcsc_state = reader_states[currslot].dwEventState;
-				*pSlotID = (CK_SLOT_ID) cackey_slot->id;
-
-				CACKEY_DEBUG_PRINTF("Returning CKR_OK (%i)", CKR_OK);
-
-				return(CKR_OK);
-			}
-		}
 	}
 
-	CACKEY_DEBUG_PRINTF("Returning CKR_FUNCTION_NOT_SUPPORTED (%i)", CKR_FUNCTION_NOT_SUPPORTED);
+	reader_states[reader_state_slot].szReader = "\\\\?PnP?\\Notification";
+	reader_states[reader_state_slot].pvUserData = NULL;
+	reader_states[reader_state_slot].dwCurrentState = SCARD_STATE_UNAWARE;
+	reader_state_slot++;
 
-	return(CKR_FUNCTION_NOT_SUPPORTED);
+	scard_est_context_ret = SCardEstablishContext(SCARD_SCOPE_SYSTEM, NULL, NULL, &pcsc_handle);
+	if (scard_est_context_ret != SCARD_S_SUCCESS) {
+		CACKEY_DEBUG_PRINTF("Returning CKR_GENERAL_ERROR (%i) because SCardEstablishContext failed: %lx", CKR_GENERAL_ERROR, scard_est_context_ret);
+
+		return(CKR_GENERAL_ERROR);
+	}
+
+	scard_getstatchng_ret = SCardGetStatusChange(pcsc_handle, INFINITE, reader_states, reader_state_slot);
+
+	SCardReleaseContext(pcsc_handle);
+
+	if (scard_getstatchng_ret != SCARD_S_SUCCESS) {
+		CACKEY_DEBUG_PRINTF("Returning CKR_GENERAL_ERROR (%i) because SCardGetStatusChange failed: %lx", CKR_GENERAL_ERROR, scard_getstatchng_ret);
+
+		return(CKR_GENERAL_ERROR);
+	}
+
+	for (currslot = 0; currslot < reader_state_slot; currslot++) {
+		CACKEY_DEBUG_PRINTF("[slot = %u] CurrentState = %lx, EventState = %lx",
+		    currslot,
+		    reader_states[currslot].dwCurrentState & 0xffff,
+		    reader_states[currslot].dwEventState & 0xffff
+		);
+
+		cackey_slot = (struct cackey_slot *) reader_states[currslot].pvUserData;
+
+		if (cackey_slot == NULL) {
+			/* XXX: TODO: Someone plugged in a new slot */
+			continue;
+		}
+
+		slot_changed = 0;
+
+		if ((flags & CKF_DONT_BLOCK) == CKF_DONT_BLOCK) {
+			if (cackey_slot->pcsc_state != reader_states[currslot].dwEventState) {
+				slot_changed = 1;
+			}
+		} else {
+			if (reader_states[currslot].dwCurrentState != reader_states[currslot].dwEventState) {
+				slot_changed = 1;
+			}
+		}
+
+		if (slot_changed == 0) {
+			continue;
+		}
+
+		CACKEY_DEBUG_PRINTF("Returning slot changed: %u", (unsigned int) cackey_slot->id);
+
+		cackey_slot->pcsc_state = reader_states[currslot].dwEventState;
+		*pSlotID = (CK_SLOT_ID) cackey_slot->id;
+
+		CACKEY_DEBUG_PRINTF("Returning CKR_OK (%i)", CKR_OK);
+
+		return(CKR_OK);
+	}
+
+	if ((flags & CKF_DONT_BLOCK) != CKF_DONT_BLOCK) {
+		CACKEY_DEBUG_PRINTF("Returning CKR_NO_EVENT (%i), but asked to block !? BUG ENCOUNTERED.", CKR_NO_EVENT);
+	} else {
+		CACKEY_DEBUG_PRINTF("Returning CKR_NO_EVENT (%i)", CKR_NO_EVENT);
+	}
+
+	return(CKR_NO_EVENT);
 }
 
 CK_DEFINE_FUNCTION(CK_RV, C_GetMechanismList)(CK_SLOT_ID slotID, CK_MECHANISM_TYPE_PTR pMechanismList, CK_ULONG_PTR pulCount) {

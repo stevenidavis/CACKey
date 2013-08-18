@@ -230,12 +230,21 @@ int main_pkcs11(void) {
 		return(1);
 	}
 
+	/* Test waiting for slot events */
 	currSlot = 0;
 	printf("Please insert a card now.\n");
+
+	/* Initially, every slot has changed state (but probably should not) */
+	chk_rv = C_WaitForSlotEvent(0, &currSlot, NULL);
+
+	/* This actually waits */
 	chk_rv = C_WaitForSlotEvent(0, &currSlot, NULL);
 	if (chk_rv != CKR_OK) {
 		printf("Failed to wait for slot event.\n");
 	}
+
+	/* This just ensures DONT_BLOCK works */
+	chk_rv = C_WaitForSlotEvent(CKF_DONT_BLOCK, &currSlot, NULL);
 
 	for (currSlot = 0; currSlot < numSlots; currSlot++) {
 		printf("  Slot %lu:\n", currSlot);
