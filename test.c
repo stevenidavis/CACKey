@@ -230,6 +230,13 @@ int main_pkcs11(void) {
 		return(1);
 	}
 
+	currSlot = 0;
+	printf("Please insert a card now.\n");
+	chk_rv = C_WaitForSlotEvent(0, &currSlot, NULL);
+	if (chk_rv != CKR_OK) {
+		printf("Failed to wait for slot event.\n");
+	}
+
 	for (currSlot = 0; currSlot < numSlots; currSlot++) {
 		printf("  Slot %lu:\n", currSlot);
 
