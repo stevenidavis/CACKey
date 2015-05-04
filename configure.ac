@@ -1,4 +1,4 @@
-AC_INIT(cackey, 0.6.6) 
+AC_INIT(cackey, 0.7.1) 
 AC_CONFIG_HEADERS(config.h)
 
 dnl Locate standard tools
@@ -142,6 +142,49 @@ AC_LINK_IFELSE(
 		AC_MSG_FAILURE([simple PC/SC program failed])
 	]
 )
+
+dnl Option to enable DoD certs on hardware slot
+AC_ARG_ENABLE(dod-certs-on-hw-slots, AC_HELP_STRING([--enable-dod-certs-on-hw-slots], [Specify that DoD certificates should be made available on hardware token slots]), [
+	dodcertsonhwslots=$enableval
+], [
+	dodcertsonhwslots=no
+])
+
+if ! test "${dodcertsonhwslots}" = 'no'; then
+	AC_DEFINE(CACKEY_CARD_SLOT_INCLUDE_EXTRA_CERTS, [1], [Specify that DoD certificates should be made available on hardware token slots])
+fi
+
+dnl Option to disable DoD certs entirely
+AC_ARG_ENABLE(dod-certs, AC_HELP_STRING([--disable-dod-certs], [Disable including DoD certs entirely.  The user may override this with the CACKEY_EXTRA_CERTS environment variable.]), [
+	dodcerts=$enableval
+], [
+	dodcerts=yes
+])
+
+if test "${dodcerts}" = 'no'; then
+	AC_DEFINE(CACKEY_NO_EXTRA_CERTS, [1], [Specify that DoD certificates should not be made available])
+fi
+
+dnl Option to hard-code a command to run to request a PIN (enabling protected authentication path)
+AC_ARG_WITH(pin-command, AC_HELP_STRING([--with-pin-command=<command>], [Specify a command to run to request a PIN from the user.  The user may override this with the CACKEY_PIN_COMMAND environment variable.]), [
+	pincommand="${withval}"
+], [
+	pincommand="no"
+])
+
+AC_ARG_WITH(pin-command-x, AC_HELP_STRING([--with-pin-command-x=<command>], [Same as --with-pin-command, but only sets Protected Authentication Path if the DISPLAY environment variable is set]), [
+	pincommandxonly="${withval}"
+], [
+	pincommandxonly="no"
+])
+
+if ! test "${pincommand}" = 'no'; then
+	AC_DEFINE_UNQUOTED(CACKEY_PIN_COMMAND_DEFAULT, [$pincommand], [Command to run to prompt user for PIN])
+fi
+
+if ! test "${pincommandxonly}" = 'no'; then
+	AC_DEFINE_UNQUOTED(CACKEY_PIN_COMMAND_XONLY_DEFAULT, [$pincommandxonly], [Command to run to prompt user for PIN only if DISPLAY environment variable is set])
+fi
 
 dnl Set version script, to limit the scope of symbols
 DC_SETVERSIONSCRIPT(libcackey.vers, libcackey.syms)

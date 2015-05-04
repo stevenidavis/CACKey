@@ -1,0 +1,17 @@
+Makefile
+aclocal.m4
+cackey.o
+cackey_g.o
+config.guess
+config.h
+config.h.in
+config.log
+config.status
+config.sub
+configure
+install-sh
+libcackey_g.so
+libcackey.so
+libcackey.syms
+build/certs
+test
