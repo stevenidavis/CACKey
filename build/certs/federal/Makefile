@@ -1,4 +1,6 @@
-all: cert-1.crt CPCA_TRCA.crt CommonPolicy.crt
+all: certs USG-federal-bundle.pem
+
+certs: cert-1.crt CPCA_TRCA.crt CommonPolicy.crt
 	grep -l 'Issuer: C=US, O=U.S. Government, OU=FPKI, CN=Federal Bridge CA' *.crt | xargs rm -f
 	grep -l 'Subject: C=US, O=U.S. Government, OU=FPKI, CN=Federal Common Policy CA' *.crt  | xargs grep -H 'Issuer:' | grep -v 'Issuer: C=us, O=U.S. Government, OU=FBCA, CN=Common Policy' | cut -f 1 -d : | xargs rm -f
 
@@ -33,9 +35,17 @@ cert-%.crt: root_sia.p7b caCertsIssuedTofcpca.p7c
 		fi; \
 	done
 
+USG-federal-bundle.pem: certs
+	../build-tree.sh > "$@"
+
+USG-federal-bundle.pk7: USG-federal-bundle.pem
+	openssl crl2pkcs7 -outform der -nocrl -certfile USG-federal-bundle.pem > USG-federal-bundle.pk7
+
 clean:
-	rm -f cert-*.crt
+	rm -f cert-*.crt USG-federal-bundle.pem USG-federal-bundle.pk7
 	rm -f CPCA_TRCA.crt.new root_sia.p7b.new caCertsIssuedTofcpca.p7c.new CommonPolicy.crt.new
 
 distclean: clean
 	rm -f CPCA_TRCA.crt root_sia.p7b caCertsIssuedTofcpca.p7c CommonPolicy.crt
+
+.PHONY: all certs

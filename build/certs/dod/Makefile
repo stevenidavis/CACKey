@@ -1,4 +1,6 @@
-all: cert-0.crt
+all: certs USG-dod-bundle.pem
+
+certs: cert-0.crt
 
 rel3_dodroot_2048.cac:
 	wget -O "$@.new" http://dodpki.c3pki.chamb.disa.mil/rel3_dodroot_2048.cac
@@ -18,9 +20,14 @@ cert-%.crt: rel3_dodroot_2048.cac
 		fi; \
 	done
 
+USG-dod-bundle.pem: certs
+	../build-tree.sh > "$@"
+
 clean:
 	rm -f cert-*.crt
 	rm -f rel3_dodroot_2048.cac.new
 
 distclean: clean
 	rm -f rel3_dodroot_2048.cac
+
+.PHONY: all certs
