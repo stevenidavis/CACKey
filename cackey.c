@@ -4826,7 +4826,6 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetSlotList)(CK_BBOOL tokenPresent, CK_SLOT_ID_PTR p
 	DWORD pcsc_readers_len;
 	LONG scard_listreaders_ret;
 	size_t curr_reader_len;
-	int slot_reset;
 	int include_reader;
 
 	CACKEY_DEBUG_PRINTF("Called.");
@@ -4851,44 +4850,18 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetSlotList)(CK_BBOOL tokenPresent, CK_SLOT_ID_PTR p
 	}
 
 	/* Clear list of slots */
-	slot_reset = 0;
 	if (pSlotList) {
-		if (first_call) {
-			first_call = 0;
+		CACKEY_DEBUG_PRINTF("Purging all slot information.");
 
-			slot_reset = 1;
-		}
+		/* Only update the list of slots if we are actually being supply the slot information */
+		cackey_slots_disconnect_all(1);
 
-		/* If any of the slots have been reset then purge all information and check again */
 		for (currslot = 0; currslot < (sizeof(cackey_slots) / sizeof(cackey_slots[0])); currslot++) {
 			if (cackey_slots[currslot].internal) {
 				continue;
 			}
 
-			if (!cackey_slots[currslot].active) {
-				continue;
-			}
-
-			if (cackey_slots[currslot].slot_reset) {
-				slot_reset = 1;
-
-				break;
-			}
-		}
-
-		if (slot_reset) {
-			CACKEY_DEBUG_PRINTF("Purging all slot information.");
-
-			/* Only update the list of slots if we are actually being supply the slot information */
-			cackey_slots_disconnect_all(1);
-
-			for (currslot = 0; currslot < (sizeof(cackey_slots) / sizeof(cackey_slots[0])); currslot++) {
-				if (cackey_slots[currslot].internal) {
-					continue;
-				}
-
-				cackey_slots[currslot].active = 0;
-			}
+			cackey_slots[currslot].active = 0;
 		}
 	}
 
@@ -4988,22 +4961,20 @@ CK_DEFINE_FUNCTION(CK_RV, C_GetSlotList)(CK_BBOOL tokenPresent, CK_SLOT_ID_PTR p
 
 					/* Only update the list of slots if we are actually being asked supply the slot information */
 					if (pSlotList) {
-						if (slot_reset) {
-							cackey_slots[currslot].active = 1;
-							cackey_slots[currslot].internal = 0;
-							cackey_slots[currslot].pcsc_reader = strdup(pcsc_readers);
-							cackey_slots[currslot].pcsc_card_connected = 0;
-							cackey_slots[currslot].transaction_depth = 0;
-							cackey_slots[currslot].transaction_need_hw_lock = 0;
-							if (cackey_pin_command == NULL) {
-								cackey_slots[currslot].token_flags = CKF_LOGIN_REQUIRED;
-							} else {
-								cackey_slots[currslot].token_flags = 0;
-							}
-							cackey_slots[currslot].label = NULL;
-
-							cackey_mark_slot_reset(&cackey_slots[currslot]);
+						cackey_slots[currslot].active = 1;
+						cackey_slots[currslot].internal = 0;
+						cackey_slots[currslot].pcsc_reader = strdup(pcsc_readers);
+						cackey_slots[currslot].pcsc_card_connected = 0;
+						cackey_slots[currslot].transaction_depth = 0;
+						cackey_slots[currslot].transaction_need_hw_lock = 0;
+						if (cackey_pin_command == NULL) {
+							cackey_slots[currslot].token_flags = CKF_LOGIN_REQUIRED;
+						} else {
+							cackey_slots[currslot].token_flags = 0;
 						}
+						cackey_slots[currslot].label = NULL;
+
+						cackey_mark_slot_reset(&cackey_slots[currslot]);
 					} else {
 						if (!cackey_slots[currslot].active) {
 							/* Artificially increase the number of active slots by what will become active */
