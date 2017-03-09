@@ -275,3 +275,52 @@ namespace pp {
 		return(new CACKeyModule());
 	}
 }
+
+#include "ppapi/c/ppb_core.h"
+static PP_Bool isMainThread(void) {
+	return((PP_Bool) true);
+}
+
+extern "C" const void *ifaces(const char *name) {
+	fprintf(stderr, "Asked to give an interface for \"%s\"\n", name);
+
+	if (strcmp(name, "PPB_Core;1.0") == 0) {
+		static struct PPB_Core_1_0 x = {0};
+
+		x.IsMainThread = isMainThread;
+
+		fprintf(stderr, "Returning x\n");
+
+		return(&x);
+	}
+
+	return(NULL);
+}
+
+extern "C" int main(int argc, char **argv) {
+	pp::Module *mod;
+	pp::Instance *inst;
+	PP_Instance instance = 0;
+
+	mod = new CACKeyModule();
+
+	mod->InternalInit(mod->pp_module(), ifaces);
+
+	inst = new CACKeyInstance(instance, mod->core());
+
+	{
+		pp::Var *message;
+		pp::VarDictionary messageDict;
+
+		messageDict.Set("target", "cackey");
+		messageDict.Set("command", "init");
+
+		message = new pp::Var(messageDict.pp_var());
+
+		inst->HandleMessage(*message);
+	}
+
+        printf("Hello, World !, inst = %p\n", inst);
+
+        return(0);
+}
