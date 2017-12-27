@@ -48,6 +48,14 @@
 #    undef HAVE_LIBZ
 #  endif
 #endif
+#ifndef _THREAD_EMULATION
+#  ifdef HAVE_DLFCN_H
+#    ifdef HAVE_DLSYM
+#      include <dlfcn.h>
+#      define HAVE_CACKEY_MUTEX_PTHREAD_FUNCS 1
+#    endif
+#  endif
+#endif
 #ifdef CACKEY_DEBUG_SEARCH_SPEEDTEST
 #  include <sys/time.h>
 #endif
@@ -3739,6 +3747,40 @@ static ssize_t cackey_pcsc_identity_to_label(struct cackey_pcsc_identity *identi
 	return(x509_read_ret);
 }
 
+/* Dynamically load pthreads from the running application */
+#ifdef HAVE_CACKEY_MUTEX_PTHREAD_FUNCS
+#warning building with pthreads opened via dlsym
+struct cackey_mutex_pthread_funcs_st {
+	int (*pthread_mutex_init)(pthread_mutex_t *restrict mutex, const pthread_mutexattr_t *restrict attr);
+	int (*pthread_mutex_lock)(pthread_mutex_t *mutex);
+	int (*pthread_mutex_unlock)(pthread_mutex_t *mutex);
+};
+
+static struct cackey_mutex_pthread_funcs_st *cackey_mutex_pthread_funcs(void) {
+	static struct cackey_mutex_pthread_funcs_st funcs = {0};
+	static int init = 0;
+
+	if (init != 0) {
+		return(&funcs);
+	}
+
+	funcs.pthread_mutex_init = dlsym(RTLD_DEFAULT, "pthread_mutex_init");
+	funcs.pthread_mutex_lock = dlsym(RTLD_DEFAULT, "pthread_mutex_lock");
+	funcs.pthread_mutex_unlock = dlsym(RTLD_DEFAULT, "pthread_mutex_unlock");
+
+	init = 1;
+
+	return(&funcs);
+}
+#define cackey_pthread_mutex_init cackey_mutex_pthread_funcs()->pthread_mutex_init
+#define cackey_pthread_mutex_lock cackey_mutex_pthread_funcs()->pthread_mutex_lock
+#define cackey_pthread_mutex_unlock cackey_mutex_pthread_funcs()->pthread_mutex_unlock
+#else
+#define cackey_pthread_mutex_init pthread_mutex_init
+#define cackey_pthread_mutex_lock pthread_mutex_lock
+#define cackey_pthread_mutex_unlock pthread_mutex_unlock
+#endif
+
 /* Returns 0 on success */
 static int cackey_mutex_create(void **mutex) {
 	pthread_mutex_t *pthread_mutex;
@@ -3755,7 +3797,7 @@ static int cackey_mutex_create(void **mutex) {
 			return(-1);
 		}
 
-		pthread_retval = pthread_mutex_init(pthread_mutex, NULL);
+		pthread_retval = cackey_pthread_mutex_init(pthread_mutex, NULL);
 		if (pthread_retval != 0) {
 			CACKEY_DEBUG_PRINTF("pthread_mutex_init() returned error (%i).", pthread_retval);
 
@@ -3791,7 +3833,7 @@ static int cackey_mutex_lock(void *mutex) {
 	if ((cackey_args.flags & CKF_OS_LOCKING_OK) == CKF_OS_LOCKING_OK) {
 		pthread_mutex = mutex;
 
-		pthread_retval = pthread_mutex_lock(pthread_mutex);
+		pthread_retval = cackey_pthread_mutex_lock(pthread_mutex);
 		if (pthread_retval != 0) {
 			CACKEY_DEBUG_PRINTF("pthread_mutex_lock() returned error (%i).", pthread_retval);
 
@@ -3825,7 +3867,7 @@ static int cackey_mutex_unlock(void *mutex) {
 	if ((cackey_args.flags & CKF_OS_LOCKING_OK) == CKF_OS_LOCKING_OK) {
 		pthread_mutex = mutex;
 
-		pthread_retval = pthread_mutex_unlock(pthread_mutex);
+		pthread_retval = cackey_pthread_mutex_unlock(pthread_mutex);
 		if (pthread_retval != 0) {
 			CACKEY_DEBUG_PRINTF("pthread_mutex_unlock() returned error (%i).", pthread_retval);
 
@@ -4618,6 +4660,14 @@ CK_DEFINE_FUNCTION(CK_RV, C_Initialize)(CK_VOID_PTR pInitArgs) {
 
 				return(CKR_ARGUMENTS_BAD);
 			}
+		} else {
+#ifdef HAVE_CACKEY_MUTEX_PTHREAD_FUNCS
+			if (cackey_mutex_pthread_funcs()->pthread_mutex_init == NULL || cackey_mutex_pthread_funcs()->pthread_mutex_lock == NULL || cackey_mutex_pthread_funcs()->pthread_mutex_unlock == NULL) {
+				CACKEY_DEBUG_PRINTF("Error. Library is not linked to pthreads and we are unable to find them at runtime.");
+
+				return(CKR_GENERAL_ERROR);
+			}
+#endif
 		}
 	} else {
 		cackey_args.CreateMutex = NULL;

@@ -82,6 +82,9 @@ DC_PCSC
 dnl Check for ZLIB libraries
 AC_CHECK_LIB(z, uncompress)
 
+dnl Check for dl headers and functions
+DC_DLFUNCS
+
 dnl Verify that a basic program will compile
 AC_CACHE_CHECK([if basic PC/SC program works], cackey_cv_pcsc_works, [
 	AC_LINK_IFELSE(
