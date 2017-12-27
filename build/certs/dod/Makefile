@@ -1,10 +1,13 @@
+DOD_CERTS_VERSION = 5.1
+
 all: cert-0.crt
 
 rel3_dodroot_2048.cac:
-	wget -O Certificates_PKCS7_v4.1_DoD.zip http://iasecontent.disa.mil/pki-pke/Certificates_PKCS7_v4.1_DoD.zip
-	unzip Certificates_PKCS7_v4.1_DoD.zip Certificates_PKCS7_v4.1_DoD/Certificates_PKCS7_v4.1_DoD.der.p7b
-	mv Certificates_PKCS7_v4.1_DoD/Certificates_PKCS7_v4.1_DoD.der.p7b "$@"
-	rm -rf Certificates_PKCS7_v4.1_DoD Certificates_PKCS7_v4.1_DoD.zip
+	rm -f __TMP__.zip
+	wget -O __TMP__.zip http://iasecontent.disa.mil/pki-pke/Certificates_PKCS7_v$(DOD_CERTS_VERSION)_DoD.zip
+	unzip __TMP__.zip '*/*.der.p7b'
+	mv */*.der.p7b "$@"
+	rm -rf Certificates_P* __TMP__.zip
 
 cert-%.crt: rel3_dodroot_2048.cac
 	idx=0; \
