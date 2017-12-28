@@ -18,7 +18,55 @@
 
 #include "./pkcs11/pkcs11.h"
 
+#ifndef CACKEY_LIBRARY_FILE
+#define CACKEY_LIBRARY_FILE "libcackey_g.so"
+#endif
+
 static void *libcackey_wrap_handle = NULL_PTR;
+
+static void libcackey_wrap_init(void);
+
+static CK_RV libcackey_wrap_createmutex(CK_VOID_PTR_PTR ppMutex) {
+	int (*create_mutex)(pthread_mutex_t *restrict mutex, const pthread_mutexattr_t *restrict attr);
+	pthread_mutex_t *pthread_mutex;
+	int pthread_retval;
+
+	libcackey_wrap_init();
+
+	pthread_mutex = malloc(sizeof(*pthread_mutex));
+
+	create_mutex = dlsym(libcackey_wrap_handle, "pthread_mutex_init");
+	pthread_retval = create_mutex(pthread_mutex, NULL);
+	if (pthread_retval != 0) {
+		return(CKR_GENERAL_ERROR);
+	}
+
+	*ppMutex = pthread_mutex;
+
+	return(CKR_OK);
+}
+
+#define libcackey_wrap_genericmutexfunc(funcName, pthreadName) \
+	static CK_RV funcName(CK_VOID_PTR pMutex) { \
+		int (*func)(pthread_mutex_t *mutex); \
+		pthread_mutex_t *pthread_mutex; \
+		int pthread_retval; \
+		libcackey_wrap_init(); \
+		pthread_mutex = pMutex; \
+		func = dlsym(libcackey_wrap_handle, pthreadName); \
+		pthread_retval = func(pthread_mutex); \
+		if (pthread_retval != 0) { \
+			return(CKR_GENERAL_ERROR); \
+		} \
+		if (strcmp(pthreadName, "pthread_mutex_destroy") == 0) { \
+			free(pthread_mutex); \
+		} \
+		return(CKR_OK); \
+	}
+
+libcackey_wrap_genericmutexfunc(libcackey_wrap_destroymutex, "pthread_mutex_destroy")
+libcackey_wrap_genericmutexfunc(libcackey_wrap_lockmutex, "pthread_mutex_lock")
+libcackey_wrap_genericmutexfunc(libcackey_wrap_unlockmutex, "pthread_mutex_unlock")
 
 static void libcackey_wrap_init(void) {
 	Dl_info libinfo;
@@ -57,7 +105,7 @@ static void libcackey_wrap_init(void) {
 	}
 	*libraryDirLastSlash = '\0';
 
-	asprintf(&library, "%s/libcackey.so", libraryDir);
+	asprintf(&library, "%s/" CACKEY_LIBRARY_FILE, libraryDir);
 
 	libcackey_wrap_handle = dlmopen(LM_ID_NEWLM, library, RTLD_LOCAL | RTLD_NOW);
 
@@ -70,6 +118,18 @@ static void libcackey_wrap_init(void) {
 	}
 
 	free(library);
+
+	return;
+}
+
+static void libcackey_wrap_fini(void) {
+	if (!libcackey_wrap_handle) {
+		return;
+	}
+
+	dlclose(libcackey_wrap_handle);
+
+	libcackey_wrap_handle = NULL_PTR;
 
 	return;
 }

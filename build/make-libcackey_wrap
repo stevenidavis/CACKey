@@ -4,8 +4,24 @@ cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 
 cat libcackey_wrap.c.in
 
+functionList=()
+while IFS='' read -r line; do
+	function="$(echo "${line}" | cut -f 2 -d , | cut -f 1 -d ')' | sed 's@ *@@g')"
+
+	if [ "${function}" = 'C_LoginMutexArg' ]; then
+		continue
+	fi
+
+	functionList=("${functionList[@]}" "${function}")
+done < <(grep '^CK_DEFINE_FUNCTION' ../cackey.c)
+
 grep '^CK_DEFINE_FUNCTION' ../cackey.c | while IFS='' read -r line; do
 	function="$(echo "${line}" | cut -f 2 -d , | cut -f 1 -d ')' | sed 's@ *@@g')"
+
+	if [ "${function}" = 'C_LoginMutexArg' ]; then
+		continue
+	fi
+
 	args="$(echo "${line}" | cut -f 3 -d '(' | cut -f 1 -d ')' | tr ',' $'\n' | sed 's@^ *@@')"
 	argNames=()
 	while read argType argName; do
@@ -21,11 +37,60 @@ grep '^CK_DEFINE_FUNCTION' ../cackey.c | while IFS='' read -r line; do
 	echo ''
 	echo "${line}"
 	echo $'\t'"CK_RV (*func)($(echo "${args}" | tr $'\n' ',' | sed 's@,*$@@;s@,@, @g'));"
+	case "${function}" in
+		C_Finalize)
+			echo $'\t''CK_RV retval;'
+			;;
+		C_Initialize)
+			echo $'\t''CK_C_INITIALIZE_ARGS CK_PTR args, localargs;'
+			;;
+		C_GetFunctionList)
+			echo $'\t''CK_RV retval;'
+			echo $'\t''CK_FUNCTION_LIST_PTR pFunctionList;'
+			;;
+	esac
+
 	echo ''
 	echo $'\t''libcackey_wrap_init();'
+
+	if [ "${function}" = 'C_Initialize' ]; then
+		echo ''
+		echo $'\t''if (pInitArgs) {'
+		echo $'\t\t''args = pInitArgs;'
+		echo $'\t\t''if ((args->flags & CKF_OS_LOCKING_OK) == CKF_OS_LOCKING_OK) {'
+#echo 'fprintf(stderr, "replacing=%p\n", pInitArgs); fflush(stderr); abort();'
+		echo $'\t\t\t''memcpy(&localargs, args, sizeof(*args));'
+		echo $'\t\t\t''localargs.CreateMutex = libcackey_wrap_createmutex;'
+		echo $'\t\t\t''localargs.DestroyMutex = libcackey_wrap_destroymutex;'
+		echo $'\t\t\t''localargs.LockMutex = libcackey_wrap_lockmutex;'
+		echo $'\t\t\t''localargs.UnlockMutex = libcackey_wrap_unlockmutex;'
+		echo $'\t\t\t''localargs.flags &= ~CKF_OS_LOCKING_OK;'
+		echo $'\t\t\t''pInitArgs = &localargs;'
+		echo $'\t\t''}'
+		echo $'\t''}'
+	fi
 	echo ''
 	echo $'\t'"func = dlsym(libcackey_wrap_handle, \"${function}\");"
 	echo ''
-	echo $'\t'"return(func($argNamesList));"
+	if [ "${function}" = 'C_Finalize' ]; then
+		echo $'\t'"retval = func($argNamesList);"
+		echo ''
+		echo $'\t''libcackey_wrap_fini();'
+		echo ''
+		echo $'\t''return(retval);'
+	elif [ "${function}" = 'C_GetFunctionList' ]; then
+		echo $'\t'"retval = func($argNamesList);"
+		echo ''
+		echo $'\t''if (retval == CKR_OK) {'
+		echo $'\t\t''pFunctionList = *ppFunctionList;'
+		for function in "${functionList[@]}"; do
+			echo $'\t\t'"pFunctionList->${function} = ${function};"
+		done
+		echo $'\t''}'
+		echo ''
+		echo $'\t''return(retval);'
+	else
+		echo $'\t'"return(func($argNamesList));"
+	fi
 	echo '}'
 done

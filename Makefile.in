@@ -50,7 +50,7 @@ libcackey_g.a: cackey_g.o
 	-$(RANLIB) libcackey_g.a
 
 libcackey_wrap.@SHOBJEXT@: libcackey_wrap.o
-	$(CC) $(SHOBJFLAGS) $(SHOBJLDFLAGS) -o libcackey_wrap.@SHOBJEXT@ libcackey_wrap.o
+	$(CC) $(SHOBJFLAGS) $(SHOBJLDFLAGS) -o libcackey_wrap.@SHOBJEXT@ libcackey_wrap.o -ldl
 	-@WEAKENSYMS@ "libcackey_wrap.@SHOBJEXT@"
 	-@REMOVESYMS@ "libcackey_wrap.@SHOBJEXT@"
 	
