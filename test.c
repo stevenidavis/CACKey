@@ -557,9 +557,9 @@ int main_pkcs11(void) {
 		}
 	}
 
-	chk_rv = C_OpenSession(slots[0], CKF_SERIAL_SESSION, NULL, NULL, &hSession);
+	chk_rv = C_OpenSession(slots[1], CKF_SERIAL_SESSION, NULL, NULL, &hSession);
 	if (chk_rv == CKR_OK) {
-		chk_rv = C_GetTokenInfo(slots[0], &tokenInfo);
+		chk_rv = C_GetTokenInfo(slots[1], &tokenInfo);
 		if (chk_rv != CKR_OK) {
 			return(1);
 		}

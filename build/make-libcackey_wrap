@@ -41,9 +41,6 @@ grep '^CK_DEFINE_FUNCTION' ../cackey.c | while IFS='' read -r line; do
 		C_Finalize)
 			echo $'\t''CK_RV retval;'
 			;;
-		C_Initialize)
-			echo $'\t''CK_C_INITIALIZE_ARGS CK_PTR args, localargs;'
-			;;
 		C_GetFunctionList)
 			echo $'\t''CK_RV retval;'
 			echo $'\t''CK_FUNCTION_LIST_PTR pFunctionList;'
@@ -53,22 +50,6 @@ grep '^CK_DEFINE_FUNCTION' ../cackey.c | while IFS='' read -r line; do
 	echo ''
 	echo $'\t''libcackey_wrap_init();'
 
-	if [ "${function}" = 'C_Initialize' ]; then
-		echo ''
-		echo $'\t''if (pInitArgs) {'
-		echo $'\t\t''args = pInitArgs;'
-		echo $'\t\t''if ((args->flags & CKF_OS_LOCKING_OK) == CKF_OS_LOCKING_OK) {'
-#echo 'fprintf(stderr, "replacing=%p\n", pInitArgs); fflush(stderr); abort();'
-		echo $'\t\t\t''memcpy(&localargs, args, sizeof(*args));'
-		echo $'\t\t\t''localargs.CreateMutex = libcackey_wrap_createmutex;'
-		echo $'\t\t\t''localargs.DestroyMutex = libcackey_wrap_destroymutex;'
-		echo $'\t\t\t''localargs.LockMutex = libcackey_wrap_lockmutex;'
-		echo $'\t\t\t''localargs.UnlockMutex = libcackey_wrap_unlockmutex;'
-		echo $'\t\t\t''localargs.flags &= ~CKF_OS_LOCKING_OK;'
-		echo $'\t\t\t''pInitArgs = &localargs;'
-		echo $'\t\t''}'
-		echo $'\t''}'
-	fi
 	echo ''
 	echo $'\t'"func = dlsym(libcackey_wrap_handle, \"${function}\");"
 	echo ''

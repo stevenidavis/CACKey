@@ -3,9 +3,9 @@
 
 #include "config.h"
 
-#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
 #define CK_PTR *
 #define CK_DEFINE_FUNCTION(returnType, name) returnType name
@@ -22,51 +22,74 @@
 #define CACKEY_LIBRARY_FILE "libcackey_g.so"
 #endif
 
+void abort(void);
+void free(void *ptr);
+
 static void *libcackey_wrap_handle = NULL_PTR;
 
-static void libcackey_wrap_init(void);
+typedef enum {
+	LIBCACKEY_WRAP_MUTEX_UNINIT = 0,
+	LIBCACKEY_WRAP_MUTEX_INIT,
+	LIBCACKEY_WRAP_MUTEX_UNLOCKED,
+	LIBCACKEY_WRAP_MUTEX_LOCKED,
+} libcackey_wrap_mutexes_states_t;
+static libcackey_wrap_mutexes_states_t libcackey_wrap_mutexes[16] = {LIBCACKEY_WRAP_MUTEX_UNINIT};
 
-static CK_RV libcackey_wrap_createmutex(CK_VOID_PTR_PTR ppMutex) {
-	int (*create_mutex)(pthread_mutex_t *restrict mutex, const pthread_mutexattr_t *restrict attr);
-	pthread_mutex_t *pthread_mutex;
-	int pthread_retval;
+typedef libcackey_wrap_mutexes_states_t *pthread_mutex_t;
+typedef int pthread_mutexattr_t;
 
-	libcackey_wrap_init();
+int pthread_mutex_init(pthread_mutex_t *restrict mutex, const pthread_mutexattr_t *restrict attr) {
+	libcackey_wrap_mutexes_states_t *mutex_;
+	int idx;
 
-	pthread_mutex = malloc(sizeof(*pthread_mutex));
-
-	create_mutex = dlsym(libcackey_wrap_handle, "pthread_mutex_init");
-	pthread_retval = create_mutex(pthread_mutex, NULL);
-	if (pthread_retval != 0) {
-		return(CKR_GENERAL_ERROR);
+	for (idx = 0; idx < (sizeof(libcackey_wrap_mutexes) / sizeof(libcackey_wrap_mutexes[0])); idx++) {
+		if (libcackey_wrap_mutexes[idx] == LIBCACKEY_WRAP_MUTEX_UNINIT) {
+			libcackey_wrap_mutexes[idx] = LIBCACKEY_WRAP_MUTEX_INIT;
+			mutex_ = &libcackey_wrap_mutexes[idx];
+			break;
+		}
 	}
 
-	*ppMutex = pthread_mutex;
+	if (!mutex_) {
+		return(1);
+	}
+
+	*mutex = mutex_;
+
+	return(0);
+}
+
+int pthread_mutex_destroy(pthread_mutex_t *mutex) {
+	**mutex = LIBCACKEY_WRAP_MUTEX_UNINIT;
+
+	return(0);
+}
+
+int pthread_mutex_lock(pthread_mutex_t *mutex) {
+	struct timespec sleeptime;
+
+	while (**mutex == LIBCACKEY_WRAP_MUTEX_LOCKED) {
+		sleeptime.tv_sec = 0;
+		sleeptime.tv_nsec = 1000000;
+		nanosleep(&sleeptime, NULL);
+fprintf(stderr, "mutex %p is locked\n", mutex); fflush(stderr);
+		/* Do nothing */
+	}
+
+fprintf(stderr, "locking mutex %p\n", mutex); fflush(stderr);
+	**mutex = LIBCACKEY_WRAP_MUTEX_LOCKED;
+fprintf(stderr, "locked mutex %p\n", mutex); fflush(stderr);
 
 	return(CKR_OK);
 }
 
-#define libcackey_wrap_genericmutexfunc(funcName, pthreadName) \
-	static CK_RV funcName(CK_VOID_PTR pMutex) { \
-		int (*func)(pthread_mutex_t *mutex); \
-		pthread_mutex_t *pthread_mutex; \
-		int pthread_retval; \
-		libcackey_wrap_init(); \
-		pthread_mutex = pMutex; \
-		func = dlsym(libcackey_wrap_handle, pthreadName); \
-		pthread_retval = func(pthread_mutex); \
-		if (pthread_retval != 0) { \
-			return(CKR_GENERAL_ERROR); \
-		} \
-		if (strcmp(pthreadName, "pthread_mutex_destroy") == 0) { \
-			free(pthread_mutex); \
-		} \
-		return(CKR_OK); \
-	}
+int pthread_mutex_unlock(pthread_mutex_t *mutex) {
+fprintf(stderr, "unlocking mutex %p\n", mutex); fflush(stderr);
+	**mutex = LIBCACKEY_WRAP_MUTEX_UNLOCKED;
+fprintf(stderr, "unlocked mutex %p\n", mutex); fflush(stderr);
 
-libcackey_wrap_genericmutexfunc(libcackey_wrap_destroymutex, "pthread_mutex_destroy")
-libcackey_wrap_genericmutexfunc(libcackey_wrap_lockmutex, "pthread_mutex_lock")
-libcackey_wrap_genericmutexfunc(libcackey_wrap_unlockmutex, "pthread_mutex_unlock")
+	return(CKR_OK);
+}
 
 static void libcackey_wrap_init(void) {
 	Dl_info libinfo;
@@ -108,6 +131,7 @@ static void libcackey_wrap_init(void) {
 	asprintf(&library, "%s/" CACKEY_LIBRARY_FILE, libraryDir);
 
 	libcackey_wrap_handle = dlmopen(LM_ID_NEWLM, library, RTLD_LOCAL | RTLD_NOW);
+	libcackey_wrap_handle = dlmopen(LM_ID_NEWLM, , RTLD_LOCAL | RTLD_NOW);
 
 	if (!libcackey_wrap_handle) {
 		fprintf(stderr, "Unable to load \"%s\": %s\n", library, dlerror());
