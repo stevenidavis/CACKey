@@ -4,7 +4,7 @@ Version: @@VERS@@
 Release: 1
 License: Public Domain
 Packager: Roy Keene <cackey@rkeene.org>
-URL: https://software.forge.mil/sf/frs/do/listReleases/projects.community_cac/frs.cackey
+URL: https://cackey.rkeene.org/
 Source: %{name}-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-root
 Group: System Environment/Libraries
