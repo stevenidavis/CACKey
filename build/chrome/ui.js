@@ -118,10 +118,27 @@ function updateSmartcardReaders(htmlObject) {
 	return;
 }
 
-setTimeout(function() {
+function clearStatusInfo() {
+	document.getElementById('certificates').innerHTML = '<i>Loading...</i>';
+	document.getElementById('smartcard_readers').innerHTML = '<i>Loading...</i>';
+	document.getElementById('certificate_provider').innerHTML = '<i>Loading...</i>';
+}
+
+function loadStatusInfo() {
 	updateCertificates(document.getElementById('certificates'));
 	updateSmartcardReaders(document.getElementById('smartcard_readers'));
 	updateCertificateProvider(document.getElementById('certificate_provider'));
+}
 
+setTimeout(function() {
+	loadStatusInfo();
+
+	document.getElementById('reload').onclick = function() {
+		clearStatusInfo();
+		setTimeout(function() {
+			loadStatusInfo();
+		}, 1);
+	};
+	
 	return;
 }, 1);
