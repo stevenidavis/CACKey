@@ -228,7 +228,7 @@ static unsigned long CACKEY_DEBUG_GETTIME(void) {
 	buf_user[2] = 0; \
 	buf_user_p = buf_user; \
 	buf_user_size = sizeof(buf_user); \
-	for (idx = 0; idx < (y); idx++) { \
+	for (idx = 0; idx < MIN((y), sizeof(buf_user)); idx++) { \
 		if (buf_user_size <= 0) { \
 			break; \
 		}; \
@@ -4704,7 +4704,7 @@ CK_DEFINE_FUNCTION(CK_RV, C_Initialize)(CK_VOID_PTR pInitArgs) {
 		cackey_pin_command = strdup(getenv("CACKEY_PIN_COMMAND_XONLY"));
 	}
 
-	if (strcmp(cackey_pin_command, "") == 0) {
+	if (cackey_pin_command && strcmp(cackey_pin_command, "") == 0) {
 		free(cackey_pin_command);
 		cackey_pin_command = NULL;
 	}
