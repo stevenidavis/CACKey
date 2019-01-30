@@ -821,7 +821,6 @@ function cackeyAppInit() {
 				"width": 350,
 				"minWidth": 350,
 				"height": 136,
-
 				"minHeight": 135
 			}
 		}, function(uiWindow) {
