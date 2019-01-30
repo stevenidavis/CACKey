@@ -25,7 +25,9 @@ function displayCerts(htmlObject, certs) {
 		html += "\t\t" + certObj.getSubjectString() + ":" + certObj.getSerialNumberHex();
 		html += "\t\t<ol type=\"a\">";
 		html += "\t\t\t<li>Serial Number: " + certObj.getSerialNumberHex() + "</li>";
-		html += "\t\t\t<li>Usage: " + X509.getExtKeyUsageString(certObj.hex) + "</li>";
+		try {
+			html += "\t\t\t<li>Usage: " + X509.getExtKeyUsageString(certObj.hex) + "</li>";
+		} catch (_) {};
 		html += "\t\t</ol>";
 		html += "\t</li>";
 	}
