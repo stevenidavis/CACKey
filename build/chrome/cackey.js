@@ -14,6 +14,7 @@ function onCertificatesRejected(rejectedCerts) {
 var cackeyHandle = null;
 var cackeyPCSCHandle = null;
 var cackeyPCSCHandleUsable = false;
+var cackeyPCSCHandleLastUsed = (new Date()).getTime();
 
 /*
  * Handle and ID for outstanding callbacks
@@ -543,8 +544,6 @@ function cackeyUninitPCSC() {
 	if (cackeyPCSCHandle != null) {
 		console.log("[cackey] Deleting PCSC handle");
 
-		delete cackeyPCSCHandle;
-
 		cackeyPCSCHandle = null;
 	}
 
@@ -673,8 +672,19 @@ function cackeyInitPCSC(callbackAfterInit, callbackInitFailed) {
 	/*
 	 * Start the Google PCSC Interface
 	 */
+	var now, lastUsedMillisecondsAgo;
 
 	console.log("[cackey] cackeyInitPCSC() called");
+
+	now = (new Date()).getTime();
+	lastUsedMillisecondsAgo = now - cackeyPCSCHandleLastUsed;
+
+	if (lastUsedMillisecondsAgo > 30000) {
+		console.log("[cackey] PCSC handle was last used " + lastUsedMillisecondsAgo + "ms ago, restarting to get a new handle");
+		cackeyRestart();
+	}
+
+	cackeyPCSCHandleLastUsed = now;
 
 	/*
 	 * Queue this callback to be completed when initialization is complete
