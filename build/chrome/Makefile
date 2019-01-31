@@ -88,8 +88,8 @@ manifest.json: manifest.json.in ../../configure.ac
 	mv manifest.json.new manifest.json
 
 jsrsasign.js:
-	wget --no-check-certificate -O jsrsasign.js.new 'https://github.com/kjur/jsrsasign/raw/2989e2cdc29219f5fb1743dffd9cee93b7090832/jsrsasign-latest-all-min.js'
-	test "`openssl sha256 jsrsasign.js.new | sed 's@.*= *@@'`" = '99b041bccc846f03623ce52f5932bd3ff282a064e7077a4ad1c600fc70c1176b'
+	wget --no-check-certificate -O jsrsasign.js.new 'https://raw.githubusercontent.com/kjur/jsrsasign/d282c71cee92000c4807bcbf2212fedf3f22bd84/jsrsasign-all-min.js'
+	test "`openssl sha256 jsrsasign.js.new | sed 's@.*= *@@'`" = '108d6988362ac8a140cbeca45906518c7e64930f5e21813f21a8505a0d6b5edd'
 	mv jsrsasign.js.new jsrsasign.js
 
 test: cackey-chrome-pkcs11.c cackey-chrome-test.c ../../cackey.c Makefile
