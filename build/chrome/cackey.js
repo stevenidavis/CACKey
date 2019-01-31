@@ -407,9 +407,24 @@ function cackeyMessageIncoming(messageEvent) {
  */
 function cackeyListCertificates(chromeCallback) {
 	var callbackId;
+	var promiseHandle = null, promiseResolve, promiseReject;
 
 	if (goog.DEBUG) {
 		console.log("[cackey] Asked to provide a list of certificates -- throwing that request over to the NaCl side... ");
+	}
+
+	if (!chromeCallback) {
+		/*
+		 * If no callback supplied, arrange for a promise to be returned instead
+		 */
+		promiseHandle = new Promise(function(resolve, reject) {
+			promiseResolve = resolve;
+			promiseReject = reject;
+		});
+
+		chromeCallback = function(certs) {
+			promiseResolve(certs);
+		};
 	}
 
 	callbackId = ++cackeyOutstandingCallbackCounter;
@@ -430,7 +445,7 @@ function cackeyListCertificates(chromeCallback) {
 		}
 	}, chromeCallback);
 
-	return;
+	return(promiseHandle);
 }
 
 /*
