@@ -81,7 +81,7 @@ function cackeyMessageIncomingListCertificates(message, chromeCallback) {
 		certificates.push(
 			{
 				certificate: message.certificates[idx],
-				supportedHashes: ['SHA1', 'SHA256', 'MD5_SHA1']
+				supportedHashes: ['SHA1', 'SHA256', 'SHA512', 'MD5_SHA1']
 			}
 		);
 	}
@@ -487,6 +487,25 @@ function cackeySignMessage(signRequest, chromeCallback) {
 	var command;
 	var certificateId;
 	var digest, digestHeader;
+	var promiseHandle = null, promiseResolve, promiseReject;
+
+	if (!chromeCallback) {
+		/*
+		 * If no callback supplied, arrange for a promise to be returned instead
+		 */
+		promiseHandle = new Promise(function(resolve, reject) {
+			promiseResolve = resolve;
+			promiseReject = reject;
+		});
+
+		chromeCallback = function(payload) {
+			if (!payload) {
+				promiseReject(new Error("Signing payload is empty or not supplied"));
+			} else {
+				promiseResolve(payload);
+			}
+		};
+	}
 
 	/*
 	 * Prefix the digest with the ASN.1 header required of it
@@ -498,7 +517,11 @@ function cackeySignMessage(signRequest, chromeCallback) {
 		case "SHA256":
 			digestHeader = new Uint8Array([0x30, 0x31, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01, 0x05, 0x00, 0x04, 0x20]);
 			break;
+		case "SHA512":
+			digestHeader = new Uint8Array([0x30, 0x51, 0x30, 0x0d, 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03, 0x05, 0x00, 0x04, 0x40]);
+			break;
 		case "MD5_SHA1":
+		case "RAW":
 			digestHeader = new Uint8Array();
 			break;
 		default:
@@ -506,7 +529,7 @@ function cackeySignMessage(signRequest, chromeCallback) {
 
 			chromeCallback();
 
-			return;
+			return(promiseHandle);
 	}
 
 	digest = new Uint8Array(digestHeader.length + signRequest.digest.byteLength);
@@ -547,7 +570,7 @@ function cackeySignMessage(signRequest, chromeCallback) {
 		}
 	}, chromeCallback);
 
-	return;
+	return(promiseHandle);
 }
 
 /*
