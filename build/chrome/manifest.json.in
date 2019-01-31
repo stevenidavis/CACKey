@@ -25,5 +25,11 @@
 	"permissions": [
 		"certificateProvider",
 		"alwaysOnTopWindows"
-	]
+	],
+	"externally_connectable": {
+		"ids": [
+			"pnhechapfaindjhompbnflcldabbghjo",
+			"okddffdblfhhnmhodogpojmfkjmhinfp"
+		]
+	}
 }
