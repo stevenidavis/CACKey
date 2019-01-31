@@ -3,7 +3,8 @@
  */
 
 cackeySSHAgentApprovedApps = [
-	"pnhechapfaindjhompbnflcldabbghjo"
+	"pnhechapfaindjhompbnflcldabbghjo",
+	"okddffdblfhhnmhodogpojmfkjmhinfp"
 ];
 
 /*
@@ -184,6 +185,7 @@ function cackeySSHAgentEncodeCertToKeyAndID(cert) {
 	if (resultKey) {
 		result = {
 			id: certObj.getSubjectString(),
+			type: publicKey.type,
 			key: resultKey
 		};
 	}
@@ -234,7 +236,7 @@ async function cackeySSHAgentCommandRequestIdentity(request) {
 
 async function cackeySSHAgentCommandSignRequest(request) {
 	var keyInfo, data, flags;
-	var certs, certToUse;
+	var certs, certToUse, certToUseType;
 	var hashMethod, signedData, signedDataHeader, signRequest;
 	var response;
 	var flagMeaning = {
@@ -280,6 +282,7 @@ async function cackeySSHAgentCommandSignRequest(request) {
 
 		if (key.key.join() == keyInfo.join()) {
 			certToUse = cert;
+			certToUseType = key.type;
 		}
 	});
 
@@ -295,19 +298,45 @@ async function cackeySSHAgentCommandSignRequest(request) {
 	/*
 	 * Perform hashing of the data as specified by the flags
 	 */
-	if ((flags & flagMeaning.SSH_AGENT_RSA_SHA2_512) == flagMeaning.SSH_AGENT_RSA_SHA2_512) {
-		hashMethod = "SHA512";
-		data = await crypto.subtle.digest("SHA-512", new Uint8Array(data));
-	} else if ((flags & flagMeaning.SSH_AGENT_RSA_SHA2_256) == flagMeaning.SSH_AGENT_RSA_SHA2_256) {
-		hashMethod = "SHA256";
-		data = await crypto.subtle.digest("SHA-256", new Uint8Array(data));
-	} else if (flags == 0) {
-		hashMethod = "SHA1";
-		data = await crypto.subtle.digest("SHA-1", new Uint8Array(data));
-	} else {
-		console.info("[cackeySSH] Sign request with flags set to", flags, "which is unsupported, failing the request.");
+	switch (certToUseType) {
+		case "RSA":
+			if ((flags & flagMeaning.SSH_AGENT_RSA_SHA2_512) == flagMeaning.SSH_AGENT_RSA_SHA2_512) {
+				hashMethod = "SHA512";
+				data = await crypto.subtle.digest("SHA-512", new Uint8Array(data));
+			} else if ((flags & flagMeaning.SSH_AGENT_RSA_SHA2_256) == flagMeaning.SSH_AGENT_RSA_SHA2_256) {
+				hashMethod = "SHA256";
+				data = await crypto.subtle.digest("SHA-256", new Uint8Array(data));
+			} else if (flags == 0) {
+				hashMethod = "SHA1";
+				data = await crypto.subtle.digest("SHA-1", new Uint8Array(data));
+			} else {
+				console.info("[cackeySSH] Sign request with flags set to", flags, "which is unsupported, failing the request.");
 
-		return(null);
+				return(null);
+			}
+
+			switch (hashMethod) {
+				case "SHA1":
+					signedDataHeader = cackeySSHAgentEncodeString("ssh-rsa");
+					break;
+				case "SHA256":
+					signedDataHeader = cackeySSHAgentEncodeString("rsa-sha2-256");
+					break;
+				case "SHA512":
+					signedDataHeader = cackeySSHAgentEncodeString("rsa-sha2-512");
+					break;
+				default:
+					console.info("[cackeySSH] Unsupported hashing method for RSA:", hashMethod, "failing the request.");
+
+					return(null);
+					break;
+			}
+			break;
+		default:
+			console.info("[cackeySSH] Unsupported public key type:", certToUseType, "failing the request.");
+
+			return(null);
+			break;
 	}
 
 	/*
@@ -323,20 +352,6 @@ async function cackeySSHAgentCommandSignRequest(request) {
 	/*
 	 * Encode signature
 	 */
-	switch (hashMethod) {
-		case "SHA1":
-			signedDataHeader = cackeySSHAgentEncodeString("ssh-rsa");
-			break;
-		case "SHA256":
-			signedDataHeader = cackeySSHAgentEncodeString("rsa-sha2-256");
-			break;
-		case "SHA512":
-			signedDataHeader = cackeySSHAgentEncodeString("rsa-sha2-512");
-			break;
-		default:
-			signedDataHeader = [];
-			break;
-	}
 	signedData = signedDataHeader.concat(cackeySSHAgentEncodeLV(signedData));
 
 	/*
@@ -417,9 +432,7 @@ function cackeySSHAgentAcceptConnection(socket) {
 	 * Only accept connections from approved apps
 	 */
 	if (!socket.sender || !socket.sender.id || !cackeySSHAgentApprovedApps.includes(socket.sender.id)) {
-		console.log("[cackeySSH] Disconnecting unapproved app: ", socket.sender);
-
-		socket.disconnect();
+		console.log("[cackeySSH] Ignoring unapproved app: ", socket.sender);
 
 		return;
 	}
