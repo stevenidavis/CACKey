@@ -8,6 +8,49 @@ cackeySSHAgentApprovedApps = [
 ];
 
 /*
+ * XXX:TODO: Expose UI for this
+ */
+cackeySSHAgentFeatures = {
+	enabled: true,
+	includeKeys: true,
+	includeCerts: true,
+	legacy: false
+};
+
+/*
+ * Feature support checking
+ */
+function cackeySSHAgentGetSSHKeyTypes() {
+	var types = [];
+
+	if (cackeySSHAgentFeatures.includeKeys) {
+		types.push("ssh");
+	}
+
+	if (cackeySSHAgentFeatures.includeCerts) {
+		types.push("x509v3-ssh");
+
+		if (cackeySSHAgentFeatures.legacy) {
+			types.push("x509v3-sign");
+		}
+	}
+
+	return(types);
+}
+
+async function cackeySSHAgentGetCertificates() {
+	var certs;
+
+	if (!cackeySSHAgentFeatures.enabled) {
+		return([]);
+	}
+
+	certs = await cackeyListCertificates();
+
+	return(certs);
+}
+
+/*
  * SSH Element Encoding/Decoding
  */
 function cackeySSHAgentEncodeInt(uint32) {
@@ -50,10 +93,7 @@ function cackeySSHAgentEncodeBigInt(bigInt) {
 			result.reverse();
 			break;
 		case "object":
-			result = [];
-			new Uint8Array(bigInt.toByteArray()).forEach(function(e) {
-				result.push(e);
-			});
+			result = Array.from(new Uint8Array(bigInt.toByteArray()));
 			break;
 	}
 
@@ -87,6 +127,17 @@ function cackeySSHAgentDecodeLV(input) {
 		value: result,
 		output: input.slice(info.value)
 	});
+}
+
+function cackeySSHAgentEncodeArray(input) {
+	var result;
+
+	result = cackeySSHAgentEncodeInt(input.length);
+	input.forEach(function(element) {
+		result = result.concat(element);
+	});
+
+	return(result);
 }
 
 function cackeySSHAgentEncodeToUTF8Array(str) {
@@ -158,9 +209,9 @@ function cackeySSHAgentEncodeBinaryToHex(binaryString) {
 	return(buffer);
 }
 
-function cackeySSHAgentEncodeCertToKeyAndID(cert) {
+function cackeySSHAgentEncodeCertToKeyAndID(cert, keyType) {
 	var result = null, resultKey = null;
-	var certObj;
+	var certObj, certBytes;
 	var publicKey;
 
 	certObj = new X509;
@@ -168,24 +219,60 @@ function cackeySSHAgentEncodeCertToKeyAndID(cert) {
 		return(result);
 	}
 
-	certObj.readCertHex(cackeySSHAgentEncodeBinaryToHex(cert));
+	certBytes = Array.from(new Uint8Array(cert));
+
+	certObj.readCertHex(cackeySSHAgentEncodeBinaryToHex(certBytes));
 
 	publicKey = certObj.getPublicKey();
 
-	switch (publicKey.type) {
-		case "RSA":
-			resultKey = cackeySSHAgentEncodeString("ssh-rsa");
-			resultKey = resultKey.concat(cackeySSHAgentEncodeBigInt(publicKey.e));
-			resultKey = resultKey.concat(cackeySSHAgentEncodeBigInt(publicKey.n));
+	switch (keyType) {
+		case "ssh":
+			switch (publicKey.type) {
+				case "RSA":
+					resultKey = cackeySSHAgentEncodeString("ssh-rsa");
+					resultKey = resultKey.concat(cackeySSHAgentEncodeBigInt(publicKey.e));
+					resultKey = resultKey.concat(cackeySSHAgentEncodeBigInt(publicKey.n));
+					break;
+				default:
+					console.log("[cackeySSH] Unsupported public key type:", keyType, "/", publicKey.type, "-- ignoring.");
+					break;
+			}
+			break;
+		case "x509v3-sign":
+			resultKey = certBytes;
+			break;
+		case "x509v3-ssh":
+			switch (publicKey.type) {
+				case "RSA":
+					resultKey = cackeySSHAgentEncodeString("x509v3-ssh-rsa");
+
+					/*
+					 * Array of certificates
+					 */
+					resultKey = resultKey.concat(cackeySSHAgentEncodeArray([
+						cackeySSHAgentEncodeLV(certBytes)
+					]));
+
+					/*
+					 * Array of OCSP responses
+					 */
+					resultKey = resultKey.concat(cackeySSHAgentEncodeArray([]));
+					break;
+				default:
+					console.log("[cackeySSH] Unsupported public key type:", keyType, "/", publicKey.type, "-- ignoring.");
+					break;
+			}
 			break;
 		default:
-			console.log("[cackeySSH] Unsupported public key type:", publicKey.type, "-- ignoring.");
+			console.log("[cackeySSH] Unsupported SSH key type:", keyType, "-- ignoring.");
+			break;
 	}
 
 	if (resultKey) {
 		result = {
 			id: certObj.getSubjectString(),
-			type: publicKey.type,
+			publicKeyType: publicKey.type,
+			sshKeyType: keyType,
 			key: resultKey
 		};
 	}
@@ -204,19 +291,21 @@ async function cackeySSHAgentCommandRequestIdentity(request) {
 	/*
 	 * Get a list of certificates
 	 */
-	certs = await cackeyListCertificates();
+	certs = await cackeySSHAgentGetCertificates();
 
 	/*
 	 * Convert each certificate to an SSH key blob
 	 */
-	certs.forEach(function(cert) {
-		var key;
+	cackeySSHAgentGetSSHKeyTypes().forEach(function(sshKeyType) {
+		certs.forEach(function(cert) {
+			var key;
 
-		key = cackeySSHAgentEncodeCertToKeyAndID(cert.certificate);
+			key = cackeySSHAgentEncodeCertToKeyAndID(cert.certificate, sshKeyType);
 
-		if (key) {
-			keys.push(key);
-		}
+			if (key) {
+				keys.push(key);
+			}
+		});
 	});
 
 	/*
@@ -273,17 +362,19 @@ async function cackeySSHAgentCommandSignRequest(request) {
 	/*
 	 * Find the certificate that matches the requested key
 	 */
-	certs = await cackeyListCertificates();
+	certs = await cackeySSHAgentGetCertificates();
 	certToUse = null;
-	certs.forEach(function(cert) {
-		var key;
+	cackeySSHAgentGetSSHKeyTypes().forEach(function(sshKeyType) {
+		certs.forEach(function(cert) {
+			var key;
 
-		key = cackeySSHAgentEncodeCertToKeyAndID(cert.certificate);
+			key = cackeySSHAgentEncodeCertToKeyAndID(cert.certificate, sshKeyType);
 
-		if (key.key.join() == keyInfo.join()) {
-			certToUse = cert;
-			certToUseType = key.type;
-		}
+			if (key.key.join() == keyInfo.join()) {
+				certToUse = cert;
+				certToUseType = key.publicKeyType;
+			}
+		});
 	});
 
 	/*
