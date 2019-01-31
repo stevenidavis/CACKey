@@ -88,18 +88,6 @@ function cackeySSHAgentDecodeLV(input) {
 	});
 }
 
-function cackeySSHAgentEncodeTLV(tag, array) {
-	var result;
-
-	result = [];
-
-	result.push(tag & 0xff);
-
-	result = result.concat(cackeySSHAgentEncodeLV(array));
-
-	return(result);
-}
-
 function cackeySSHAgentEncodeToUTF8Array(str) {
 	var utf8 = [];
 
@@ -313,7 +301,7 @@ async function cackeySSHAgentCommandSignRequest(request) {
 	} else if ((flags & flagMeaning.SSH_AGENT_RSA_SHA2_256) == flagMeaning.SSH_AGENT_RSA_SHA2_256) {
 		hashMethod = "SHA256";
 		data = await crypto.subtle.digest("SHA-256", new Uint8Array(data));
-	} else if (flags == 1) {
+	} else if (flags == 0) {
 		hashMethod = "SHA1";
 		data = await crypto.subtle.digest("SHA-1", new Uint8Array(data));
 	} else {
@@ -385,7 +373,9 @@ async function cackeySSHAgentHandleMessage(socket, request) {
 
 	response = null;
 	if (!sshRequest.name) {
-		console.log("[cackeySSH] Unsupported request: ", request, "; from: ", socket.sender.id);
+		if (goog.DEBUG) {
+			console.log("[cackeySSH] Unsupported request: ", request, "; from: ", socket.sender.id);
+		}
 	} else {
 		if (goog.DEBUG) {
 			console.log("[cackeySSH] Request: ", sshRequest.name, "; from: ", socket.sender.id);
