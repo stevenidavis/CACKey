@@ -134,11 +134,35 @@ function cackeySSHAgentEncodeArray(input) {
 
 	result = cackeySSHAgentEncodeInt(input.length);
 	input.forEach(function(element) {
-		result = result.concat(element);
+		result = result.concat(cackeySSHAgentEncodeLV(element));
 	});
 
 	return(result);
 }
+
+function cackeySSHAgentDecodeArray(input) {
+	var items, info;
+	var itemCount;
+
+	info = cackeySSHAgentDecodeInt(input);
+	input = info.output;
+	itemCount = info.value;
+
+	items = [];
+	while (itemCount > 0) {
+		itemCount--;
+
+		info = cackeySSHAgentDecodeLV(input);
+		input = info.output;
+		items.push(info.value);
+	}
+
+	return({
+		value: items,
+		output: input
+	});
+}
+
 
 function cackeySSHAgentEncodeToUTF8Array(str) {
 	var utf8 = [];
@@ -209,7 +233,7 @@ function cackeySSHAgentEncodeBinaryToHex(binaryString) {
 	return(buffer);
 }
 
-function cackeySSHAgentEncodeCertToKeyAndID(cert, keyType) {
+function cackeySSHAgentEncodeCertToKeyAndID(cert, sshKeyType) {
 	var result = null, resultKey = null;
 	var certObj, certBytes;
 	var publicKey;
@@ -225,7 +249,7 @@ function cackeySSHAgentEncodeCertToKeyAndID(cert, keyType) {
 
 	publicKey = certObj.getPublicKey();
 
-	switch (keyType) {
+	switch (sshKeyType) {
 		case "ssh":
 			switch (publicKey.type) {
 				case "RSA":
@@ -234,7 +258,7 @@ function cackeySSHAgentEncodeCertToKeyAndID(cert, keyType) {
 					resultKey = resultKey.concat(cackeySSHAgentEncodeBigInt(publicKey.n));
 					break;
 				default:
-					console.log("[cackeySSH] Unsupported public key type:", keyType, "/", publicKey.type, "-- ignoring.");
+					console.log("[cackeySSH] Unsupported public key type:", sshKeyType, "/", publicKey.type, "-- ignoring.");
 					break;
 			}
 			break;
@@ -250,7 +274,7 @@ function cackeySSHAgentEncodeCertToKeyAndID(cert, keyType) {
 					 * Array of certificates
 					 */
 					resultKey = resultKey.concat(cackeySSHAgentEncodeArray([
-						cackeySSHAgentEncodeLV(certBytes)
+						certBytes
 					]));
 
 					/*
@@ -259,25 +283,56 @@ function cackeySSHAgentEncodeCertToKeyAndID(cert, keyType) {
 					resultKey = resultKey.concat(cackeySSHAgentEncodeArray([]));
 					break;
 				default:
-					console.log("[cackeySSH] Unsupported public key type:", keyType, "/", publicKey.type, "-- ignoring.");
+					console.log("[cackeySSH] Unsupported public key type:", sshKeyType, "/", publicKey.type, "-- ignoring.");
 					break;
 			}
 			break;
 		default:
-			console.log("[cackeySSH] Unsupported SSH key type:", keyType, "-- ignoring.");
+			console.log("[cackeySSH] Unsupported SSH key type:", sshKeyType, "-- ignoring.");
 			break;
 	}
 
 	if (resultKey) {
+		var certLabel;
+		var certSAN;
+		var ignoreException;
+
+		/*
+		 * Set a default label
+		 */
+		certLabel = certObj.getSubjectString();
+
+		/*
+		 * Try to find a better label from the certificate's
+		 * Subject Alternative Name (SAN) extensions
+		 */
+		try {
+			certSAN = certObj.getExtSubjectAltName2();
+			certSAN.forEach(function(itemPair) {
+				var itemType, itemValue;
+
+				itemType = itemPair[0];
+				itemValue = itemPair[1];
+
+				if (itemType === "MAIL") {
+					certLabel = itemValue;
+				}
+			});
+		} catch (ignoreException) {
+		}
+
 		result = {
-			id: certObj.getSubjectString(),
+			label: certLabel,
 			publicKeyType: publicKey.type,
-			sshKeyType: keyType,
+			sshKeyType: sshKeyType,
 			key: resultKey
 		};
 	}
 
 	return(result);
+}
+
+function cackeySSHAgentDecodeCert(requestArray) {
 }
 
 /*
@@ -317,7 +372,7 @@ async function cackeySSHAgentCommandRequestIdentity(request) {
 	response = response.concat(cackeySSHAgentEncodeInt(keys.length));
 	keys.forEach(function(key) {
 		response = response.concat(cackeySSHAgentEncodeLV(key.key));
-		response = response.concat(cackeySSHAgentEncodeString("CACKey: " + key.id));
+		response = response.concat(cackeySSHAgentEncodeString(key.label));
 	});
 
 	return(response);
@@ -327,11 +382,19 @@ async function cackeySSHAgentCommandSignRequest(request) {
 	var keyInfo, data, flags;
 	var certs, certToUse, certToUseType;
 	var hashMethod, signedData, signedDataHeader, signRequest;
-	var response;
+	var decryptedData, decryptRequest;
+	var operation, response;
 	var flagMeaning = {
 		SSH_AGENT_RSA_SHA2_256: 2,
-		SSH_AGENT_RSA_SHA2_512: 4
+		SSH_AGENT_RSA_SHA2_512: 4,
+		SSH_AGENT_RSA_RAW:      0x40000000,
+		SSH_AGENT_RSA_DECRYPT:  0x80000000
 	};
+
+	/*
+	 * Default mode is signing
+	 */
+	operation = "sign";
 
 	/*
 	 * Strip off the command
@@ -397,6 +460,12 @@ async function cackeySSHAgentCommandSignRequest(request) {
 			} else if ((flags & flagMeaning.SSH_AGENT_RSA_SHA2_256) == flagMeaning.SSH_AGENT_RSA_SHA2_256) {
 				hashMethod = "SHA256";
 				data = await crypto.subtle.digest("SHA-256", new Uint8Array(data));
+			} else if (flags == (flagMeaning.SSH_AGENT_RSA_RAW | flagMeaning.SSH_AGENT_RSA_DECRYPT)) {
+				operation = "decrypt";
+				data = new Uint8Array(data);
+			} else if (flags == flagMeaning.SSH_AGENT_RSA_RAW) {
+				hashMethod = "RAW";
+				data = new Uint8Array(data);
 			} else if (flags == 0) {
 				hashMethod = "SHA1";
 				data = await crypto.subtle.digest("SHA-1", new Uint8Array(data));
@@ -407,6 +476,9 @@ async function cackeySSHAgentCommandSignRequest(request) {
 			}
 
 			switch (hashMethod) {
+				case "RAW":
+					signedDataHeader = cackeySSHAgentEncodeString("rsa");
+					break;
 				case "SHA1":
 					signedDataHeader = cackeySSHAgentEncodeString("ssh-rsa");
 					break;
@@ -431,14 +503,30 @@ async function cackeySSHAgentCommandSignRequest(request) {
 	}
 
 	/*
-	 * Sign the data
+	 * Sign or decrypt the data
 	 */
-	signRequest = {
-		hash: hashMethod,
-		digest: new Uint8Array(data)
-	};
-	signedData = await cackeySignMessage(signRequest);
-	signedData = Array.from(new Uint8Array(signedData));
+	switch (operation) {
+		case "sign":
+			signRequest = {
+				hash: hashMethod,
+				certificate: certToUse.certificate,
+				digest: new Uint8Array(data)
+			};
+
+			if (goog.DEBUG) {
+				console.log("[cackeySSH] Requesting CACKey sign message:", signRequest);
+			}
+
+			signedData = await cackeySignMessage(signRequest);
+			signedData = Array.from(new Uint8Array(signedData));
+			break;
+		case "decrypt":
+			/* XXX:TODO: Incomplete ! */
+			decryptRequest = {
+				data: data
+			}
+			break;
+	}
 
 	/*
 	 * Encode signature
@@ -462,6 +550,7 @@ async function cackeySSHAgentCommandSignRequest(request) {
 async function cackeySSHAgentHandleMessage(socket, request) {
 	var sshRequestID, sshRequest, response, sshResponse;
 	var sshHandlerError;
+	var postMessageException;
 
 	if (!request.type || request.type !== "auth-agent@openssh.com") {
 		return;
@@ -509,7 +598,13 @@ async function cackeySSHAgentHandleMessage(socket, request) {
 		console.log("[cackeySSH] Response: ", sshResponse);
 	}
 
-	socket.postMessage(sshResponse);
+	try {
+		socket.postMessage(sshResponse);
+	} catch (postMessageException) {
+		if (goog.DEBUG) {
+			console.log("[cackeySSH] Failed to send response", postMessageException);
+		}
+	}
 
 	return;
 }
