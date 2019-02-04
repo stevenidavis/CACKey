@@ -204,6 +204,17 @@ function cackeySSHAgentEncodeToUTF8Array(str) {
 	return utf8;
 }
 
+function cackeySSHAgentDecodeFromUTF8Array(inputArray) {
+	var hexString;
+	var output;
+
+	hexString = cackeySSHAgentEncodeBinaryToHex(inputArray, "%");
+
+	output = decodeURIComponent(hexString)
+
+	return(output);
+}
+
 function cackeySSHAgentEncodeString(string) {
 	var result;
 
@@ -212,19 +223,32 @@ function cackeySSHAgentEncodeString(string) {
 	return(result);
 }
 
-function cackeySSHAgentEncodeBinaryToHex(binaryString) {
+function cackeySSHAgentDecodeString(input) {
+	var output;
+
+	output = cackeySSHAgentDecodeLV(input);
+	output.value = cackeySSHAgentDecodeFromUTF8Array(output.value);
+
+	return(output);
+}
+
+function cackeySSHAgentEncodeBinaryToHex(binaryString, prefix) {
 	var buffer;
+
+	if (!prefix) {
+		prefix = "";
+	}
 
 	switch (typeof(binaryString)) {
 		case "string":
 			buffer = binaryString.split("").map(function(c) {
-				return(c.charCodeAt(0).toString(16).padStart(2, '0'));
+				return(prefix + c.charCodeAt(0).toString(16).padStart(2, '0'));
 			}).join("");
 			break;
 		default:
 			buffer = [];
 			new Uint8Array(binaryString).map(function(c) {
-				buffer.push(c.toString(16).padStart(2, '0'));
+				buffer.push(prefix + c.toString(16).padStart(2, '0'));
 			});
 			buffer = buffer.join("");
 			break;
@@ -333,6 +357,69 @@ function cackeySSHAgentEncodeCertToKeyAndID(cert, sshKeyType) {
 }
 
 function cackeySSHAgentDecodeCert(requestArray) {
+	var type;
+	var decodeError;
+	var publicKeyType, publicKeyBlob;
+	var output;
+
+	try {
+		type = cackeySSHAgentDecodeString(requestArray);
+	} catch (decodeError) {
+		/*
+		 * x509v3-sign-rsa requests are un-prefixed :-(
+		 */
+		type = {}
+		type.value = requestArray;
+		type.output = [];
+	}
+
+	/* It might be an x509v3-sign-rsa, which is unprefixed -- try to guess */
+	if (type.value[0] == 0x30) {
+		type = "x509v3-sign-rsa";
+	} else {
+		requestArray = type.output;
+		type = type.value;
+	}
+
+	switch (type) {
+		case "ssh-rsa":
+		case "x509v3-sign-rsa":
+			publicKeyType = "RSA";
+			publicKeyBlob = requestArray;
+			break;
+		case "x509v3-ssh-rsa":
+			publicKeyType = "RSA";
+			publicKeyBlob = cackeySSHAgentDecodeArray(requestArray).value[0];
+			break;
+	}
+
+	output = {
+		publicKeyType: publicKeyType,
+		publicKeyBlob: publicKeyBlob
+	};
+
+	return(output);
+}
+
+function cackeySSHAgentCompareRequestAndKey(key1, key2) {
+	var ignoredError;
+
+	try {
+		key1 = cackeySSHAgentDecodeCert(key1);
+		key2 = cackeySSHAgentDecodeCert(key2);
+	} catch (ignoredError) {
+		return(false);
+	}
+
+	if (key1.publicKeyType !== key2.publicKeyType) {
+		return(false);
+	}
+
+	if (key1.publicKeyBlob.join(",") === key2.publicKeyBlob.join(",")) {
+		return(true);
+	}
+
+	return(false);
 }
 
 /*
@@ -431,9 +518,13 @@ async function cackeySSHAgentCommandSignRequest(request) {
 		certs.forEach(function(cert) {
 			var key;
 
+			if (certToUse) {
+				return;
+			}
+
 			key = cackeySSHAgentEncodeCertToKeyAndID(cert.certificate, sshKeyType);
 
-			if (key.key.join() == keyInfo.join()) {
+			if (cackeySSHAgentCompareRequestAndKey(key.key, keyInfo)) {
 				certToUse = cert;
 				certToUseType = key.publicKeyType;
 			}
