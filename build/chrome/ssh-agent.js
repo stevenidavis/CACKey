@@ -11,7 +11,7 @@ cackeySSHAgentApprovedApps = [
  * XXX:TODO: Expose UI for this
  */
 cackeySSHAgentFeatures = {
-	enabled: true,
+	enabled: false,
 	includeKeys: true,
 	includeCerts: true,
 	legacy: false
