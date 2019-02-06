@@ -2,14 +2,11 @@
 	"manifest_version": 2,
 	"name": "CACKey",
 	"short_name": "CACKey",
-	"version": "@PACKAGE_VERSION@.10",
-
+	"version": "@PACKAGE_VERSION@.11",
 	"description": "US Department of Defense Common Access Card (CAC) and US NIST SP 800-73 Personal Identity Verification (PIV) card support.",
-
 	"icons": {
 		"128": "icon.png"
 	},
-
 	"app": {
 		"background": {
 			"scripts": [
@@ -21,7 +18,6 @@
 			"persistent": false
 		}
 	},
-
 	"permissions": [
 		"certificateProvider",
 		"alwaysOnTopWindows"
