@@ -12,7 +12,8 @@ function onCertificatesRejected(rejectedCerts) {
  * Optional features for CACKey
  */
 var cackeyFeatures = {
-	customPINPrompt: true
+	customPINPrompt: true,
+	useChromePINDialog: true
 };
 
 /*
@@ -323,7 +324,7 @@ function cackeyMessageIncoming(messageEvent) {
 			 */
 			pinWindowPreviousHandle = "invalid";
 
-			if (messageEvent.data.originalrequest.signRequestId === null) {
+			if (messageEvent.data.originalrequest.signRequestId === null || cackeyFeatures.useChromePINDialog === false) {
 				chrome.app.window.create("pin.html", {
 					"id": "cackeyPINEntry",
 					"resizable": false,
