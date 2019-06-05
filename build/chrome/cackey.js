@@ -181,6 +181,60 @@ function cackeyCertificateToPINMapUpdateLastUsed(id) {
 }
 
 /*
+ * Handle redispatching requests after receiving a PIN
+ */
+function cackeyPINPromptCompleted(pinValue) {
+	var tmpMessageEvent;
+
+	for (messageIdx = 0; messageIdx < cackeyMessagesToRetry.length; messageIdx++) {
+		tmpMessageEvent = cackeyMessagesToRetry[messageIdx];
+
+		if (pinValue == "") {
+			if (goog.DEBUG) {
+				console.log("[cackey] The PIN dialog was closed without gathering a PIN, treating it as a failure.");
+			}
+
+			tmpMessageEvent.data.status = "error";
+			tmpMessageEvent.data.error = "PIN window closed without a PIN being provided";
+
+			cackeyMessageIncoming(tmpMessageEvent);
+		} else {
+			tmpMessageEvent.data.originalrequest.pin = pinValue;
+
+			cackeyCertificateToPINMap[cackeyCertificateToPINID(tmpMessageEvent.data.originalrequest.certificate)] = {}
+			cackeyCertificateToPINMap[cackeyCertificateToPINID(tmpMessageEvent.data.originalrequest.certificate)].pin = pinValue;
+			cackeyCertificateToPINMapUpdateLastUsed(cackeyCertificateToPINID(tmpMessageEvent.data.originalrequest.certificate));
+
+			chromeCallback = null;
+			if (tmpMessageEvent.data.id) {
+				if (cackeyOutstandingCallbacks) {
+					chromeCallback = cackeyOutstandingCallbacks[tmpMessageEvent.data.id];
+				}
+			}
+
+			cackeyInitPCSC(function() {
+				cackeyHandle.postMessage(tmpMessageEvent.data.originalrequest);
+			}, function() {
+				if (chromeCallback) {
+					chromeCallback();
+				}
+
+				if (tmpMessageEvent.data.id && cackeyOutstandingCallbacks[tmpMessageEvent.data.id]) {
+					delete cackeyOutstandingCallbacks[tmpMessageEvent.data.id];
+				}
+			});
+		}
+	}
+
+	/*
+	 * Delete the existing handle and create a new one
+	 */
+	delete cackeyMessagesToRetry;
+
+	cackeyMessagesToRetry = [];
+}
+
+/*
  * Handle an incoming message from the NaCl side and pass it off to
  * one of the handlers above for actual formatting and passing to
  * the callback
@@ -262,112 +316,86 @@ function cackeyMessageIncoming(messageEvent) {
 			 */
 			pinWindowPreviousHandle = "invalid";
 
-			chrome.app.window.create("pin.html", {
-				"id": "cackeyPINEntry",
-				"resizable": false,
-				"alwaysOnTop": true,
-				"focused": true,
-				"visibleOnAllWorkspaces": true,
-				"innerBounds": {
-					"width": 350,
-					"minWidth": 350,
-					"height": 135,
-					"minHeight": 135
-				}
-			}, function(pinWindow) {
-				/*
-				 * Set the PIN value to blank
-				 */
-				pinWindowPINValue = "";
-
-				if (!pinWindow) {
-					console.error("[cackey] No window was provided for PIN entry, this will not go well.");
-
-					return;
-				}
-
-				pinWindowPreviousHandle = pinWindow;
-
-				pinWindow.drawAttention();
-				pinWindow.focus();
-
-				/*
-				 * Register a handler to handle the window being closed without
-				 * having sent anything
-				 */
-				pinWindow.onClosed.addListener(function() {
-					var messageIdx;
-					var chromeCallback;
-
-					pinWindowPreviousHandle = null;
-
-					for (messageIdx = 0; messageIdx < cackeyMessagesToRetry.length; messageIdx++) {
-						var tmpMessageEvent;
-
-						tmpMessageEvent = cackeyMessagesToRetry[messageIdx];
-
-						if (pinWindowPINValue == "") {
-							if (goog.DEBUG) {
-								console.log("[cackey] The PIN dialog was closed without gathering a PIN, treating it as a failure.");
-							}
-
-							tmpMessageEvent.data.status = "error";
-							tmpMessageEvent.data.error = "PIN window closed without a PIN being provided";
-
-							cackeyMessageIncoming(tmpMessageEvent);
-						} else {
-							tmpMessageEvent.data.originalrequest.pin = pinWindowPINValue;
-
-							cackeyCertificateToPINMap[cackeyCertificateToPINID(tmpMessageEvent.data.originalrequest.certificate)] = {}
-							cackeyCertificateToPINMap[cackeyCertificateToPINID(tmpMessageEvent.data.originalrequest.certificate)].pin = pinWindowPINValue;
-
-							cackeyCertificateToPINMapUpdateLastUsed(cackeyCertificateToPINID(tmpMessageEvent.data.originalrequest.certificate));
-
-							chromeCallback = null;
-							if (tmpMessageEvent.data.id) {
-								if (cackeyOutstandingCallbacks) {
-									chromeCallback = cackeyOutstandingCallbacks[tmpMessageEvent.data.id];
-								}
-							}
-
-							cackeyInitPCSC(function() {
-								cackeyHandle.postMessage(tmpMessageEvent.data.originalrequest);
-							}, function() {
-								if (chromeCallback) {
-									chromeCallback();
-								}
-
-								if (tmpMessageEvent.data.id && cackeyOutstandingCallbacks[tmpMessageEvent.data.id]) {
-									delete cackeyOutstandingCallbacks[tmpMessageEvent.data.id];
-								}
-							});
-						}
+			if (messageEvent.data.originalrequest.signRequestId === null) {
+				chrome.app.window.create("pin.html", {
+					"id": "cackeyPINEntry",
+					"resizable": false,
+					"alwaysOnTop": true,
+					"focused": true,
+					"visibleOnAllWorkspaces": true,
+					"innerBounds": {
+						"width": 350,
+						"minWidth": 350,
+						"height": 135,
+						"minHeight": 135
 					}
-
-
+				}, function(pinWindow) {
 					/*
-					 * Delete the existing handle and create a new one
-					 */
-					delete cackeyMessagesToRetry;
-
-					cackeyMessagesToRetry = [];
-
-					/*
-					 * We are done fetching the user PIN, clear the value
+					 * Set the PIN value to blank
 					 */
 					pinWindowPINValue = "";
+	
+					if (!pinWindow) {
+						console.error("[cackey] No window was provided for PIN entry, this will not go well.");
+	
+						return;
+					}
+	
+					pinWindowPreviousHandle = pinWindow;
+	
+					pinWindow.drawAttention();
+					pinWindow.focus();
+	
+					/*
+					 * Register a handler to handle the window being closed without
+					 * having sent anything
+					 */
+					pinWindow.onClosed.addListener(function() {
+						var messageIdx;
+						var chromeCallback;
+						var pinValue;
+	
+						pinWindowPreviousHandle = null;
 
+						/*
+						 * We are done fetching the user PIN, clear the value
+						 */
+						pinValue = pinWindowPINValue;
+						pinWindowPINValue = "";
+
+						cackeyPINPromptCompleted(pinValue);
+	
+						return;
+					})
+	
+					/*
+					 * Pass this message off to the other window so that it may resubmit the request.
+					 */
+					pinWindow.contentWindow.parentWindow = window;
+					pinWindow.contentWindow.messageEvent = messageEvent;
+	
 					return;
-				})
+				});
+			} else {
+				chrome.certificateProvider.requestPin({
+					signRequestId: messageEvent.data.originalrequest.signRequestId,
+					requestType: "PIN"
+				}, function(userInfo) {
+					chrome.certificateProvider.stopPinRequest({
+						signRequestId: messageEvent.data.originalrequest.signRequestId
+					}, function() {
+						var pinValue = "";
 
-				/*
-				 * Pass this message off to the other window so that it may resubmit the request.
-				 */
-				pinWindow.contentWindow.parentWindow = window;
-				pinWindow.contentWindow.messageEvent = messageEvent;
+						pinWindowPreviousHandle = null;
 
-				return;
-			});
+						if (userInfo && userInfo.userInput) {
+							pinValue = userInfo.userInput;
+						}
+
+						return(cackeyPINPromptCompleted(pinValue));
+					});
+				});
+			}
 
 			/*
 			 * We return here instead of break to avoid deleting the callback
@@ -489,6 +517,10 @@ function cackeySignMessage(signRequest, chromeCallback) {
 	var digest, digestHeader;
 	var promiseHandle = null, promiseResolve, promiseReject;
 
+	if (signRequest.signRequestId === undefined || signRequest.signRequestId === null) {
+		signRequest.signRequestId = null;
+	}
+
 	if (!chromeCallback) {
 		/*
 		 * If no callback supplied, arrange for a promise to be returned instead
@@ -547,6 +579,7 @@ function cackeySignMessage(signRequest, chromeCallback) {
 	command = {
 		'target': "cackey",
 		'command': "sign",
+		'signRequestId': signRequest.signRequestId,
 		'id': callbackId,
 		'certificate': signRequest.certificate,
 		'data': digest.buffer
