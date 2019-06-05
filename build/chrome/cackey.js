@@ -9,6 +9,13 @@ function onCertificatesRejected(rejectedCerts) {
 }
 
 /*
+ * Optional features for CACKey
+ */
+var cackeyFeatures = {
+	customPINPrompt: true
+};
+
+/*
  * Handle for the CACKey NaCl Target
  */
 var cackeyHandle = null;
@@ -342,7 +349,7 @@ function cackeyMessageIncoming(messageEvent) {
 					}
 	
 					pinWindowPreviousHandle = pinWindow;
-	
+
 					pinWindow.drawAttention();
 					pinWindow.focus();
 	
@@ -373,6 +380,10 @@ function cackeyMessageIncoming(messageEvent) {
 					 */
 					pinWindow.contentWindow.parentWindow = window;
 					pinWindow.contentWindow.messageEvent = messageEvent;
+
+					if (cackeyFeatures.customPINPrompt) {
+						pinWindow.contentWindow.pinprompt = messageEvent.data.pinprompt;
+					}
 	
 					return;
 				});
@@ -381,19 +392,24 @@ function cackeyMessageIncoming(messageEvent) {
 					signRequestId: messageEvent.data.originalrequest.signRequestId,
 					requestType: "PIN"
 				}, function(userInfo) {
-					chrome.certificateProvider.stopPinRequest({
-						signRequestId: messageEvent.data.originalrequest.signRequestId
-					}, function() {
-						var pinValue = "";
+					var destroyError;
+					var pinValue = "";
 
-						pinWindowPreviousHandle = null;
+					try {
+						chrome.certificateProvider.stopPinRequest({
+							signRequestId: messageEvent.data.originalrequest.signRequestId
+						}, function() {});
+					} catch (destroyError) {
+						/* Do nothing, we don't care if it fails really */
+					}
 
-						if (userInfo && userInfo.userInput) {
-							pinValue = userInfo.userInput;
-						}
+					pinWindowPreviousHandle = null;
 
-						return(cackeyPINPromptCompleted(pinValue));
-					});
+					if (userInfo && userInfo.userInput) {
+						pinValue = userInfo.userInput;
+					}
+
+					return(cackeyPINPromptCompleted(pinValue));
 				});
 			}
 
