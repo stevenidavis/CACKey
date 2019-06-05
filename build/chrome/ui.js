@@ -3,8 +3,9 @@ var globalCerts = null;
 function displayCerts(htmlObject, certs) {
 	var html = "";
 	var idx;
-	var cert;
+	var cert, certTitle;
 	var certObj;
+	var ignoredException;
 
 	if (certs.length == 0) {
 		htmlObject.innerHTML = "<b>No certificates found</b>";
@@ -21,13 +22,27 @@ function displayCerts(htmlObject, certs) {
 
 		certObj.readCertHex(BAtohex(new Uint8Array(cert.certificate)));
 
+		certTitle = certObj.getSubjectString();
+		try {
+			certObj.getExtSubjectAltName2().forEach(function(itemPair) {
+				var itemName, itemValue;
+
+				itemName = itemPair[0];
+				itemValue = itemPair[1];
+
+				if (itemName === "MAIL") {
+					certTitle = itemValue;
+				}
+			});
+		} catch (ignoredException) {};
+
 		html += "\t<li>";
-		html += "\t\t" + certObj.getSubjectString() + ":" + certObj.getSerialNumberHex();
+		html += "\t\t" + certTitle;
 		html += "\t\t<ol type=\"a\">";
 		html += "\t\t\t<li>Serial Number: " + certObj.getSerialNumberHex() + "</li>";
 		try {
 			html += "\t\t\t<li>Usage: " + certObj.getExtKeyUsageString() + "</li>";
-		} catch (_) {};
+		} catch (ignoredException) {};
 		html += "\t\t</ol>";
 		html += "\t</li>";
 	}
@@ -122,12 +137,18 @@ function clearStatusInfo() {
 	document.getElementById('certificates').innerHTML = '<i>Loading...</i>';
 	document.getElementById('smartcard_readers').innerHTML = '<i>Loading...</i>';
 	document.getElementById('certificate_provider').innerHTML = '<i>Loading...</i>';
+	document.getElementById('pin_caching_timeout').value = '';
+	document.getElementById('ssh_agent_enabled').checked = false;
+	document.getElementById('ssh_agent_keys').checked = false;
+	document.getElementById('ssh_agent_certs').checked = false;
+	document.getElementById('ssh_agent_certs_legacy').checked = false;
 }
 
 function loadStatusInfo() {
 	updateCertificates(document.getElementById('certificates'));
 	updateSmartcardReaders(document.getElementById('smartcard_readers'));
 	updateCertificateProvider(document.getElementById('certificate_provider'));
+	// updateOptions(getOptions());
 }
 
 setTimeout(function() {
