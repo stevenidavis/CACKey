@@ -39,3 +39,5 @@ build/chrome/google-pcsc.js
 build/chrome/manifest.json
 build/chrome/jsrsasign.js
 build/chrome/extra/*.png
+build/tcl/ssh-agent-noasync.js
+build/tcl/tclkit
