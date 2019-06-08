@@ -708,7 +708,7 @@ function cackeySSHAgentAcceptConnection(socket) {
 	/*
 	 * Only accept connections from approved apps
 	 */
-	if (!socket.sender || !socket.sender.id || !cackeySSHAgentApprovedApps.includes(socket.sender.id)) {
+	if (!socket.sender || !socket.sender.id || cackeySSHAgentApprovedApps.indexOf(socket.sender.id) == -1) {
 		console.log("[cackeySSH] Ignoring unapproved app: ", socket.sender);
 
 		return;
