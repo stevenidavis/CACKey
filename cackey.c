@@ -194,6 +194,7 @@
 #endif
 
 #ifdef CACKEY_DEBUG
+#  define CACKEY_DEBUG_MIN(a, b) ((a) < (b) ? (a) : (b))
 #  ifdef HAVE_TIME_H
 #    include <time.h>
 static time_t cackey_debug_start_time = 0;
@@ -228,7 +229,7 @@ static unsigned long CACKEY_DEBUG_GETTIME(void) {
 	buf_user[2] = 0; \
 	buf_user_p = buf_user; \
 	buf_user_size = sizeof(buf_user); \
-	for (idx = 0; idx < MIN((y), sizeof(buf_user)); idx++) { \
+	for (idx = 0; idx < CACKEY_DEBUG_MIN((y), sizeof(buf_user)); idx++) { \
 		if (buf_user_size <= 0) { \
 			break; \
 		}; \
@@ -3363,7 +3364,7 @@ static cackey_ret cackey_token_present(struct cackey_slot *slot) {
 	DWORD reader_len = 0, state = 0, protocol = 0, atr_len;
 	BYTE atr[MAX_ATR_SIZE];
 	LONG status_ret, scard_reconn_ret;
-	LPSTR *reader_name;
+	LPSTR reader_name;
 
 	CACKEY_DEBUG_PRINTF("Called.");
 
