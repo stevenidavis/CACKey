@@ -1,18 +1,37 @@
 #! /usr/bin/env tclsh
 
-lappend auto_path /home/rkeene/devel/tcl-duktape/build/work /home/rkeene/devel/tuapi /home/rkeene/devel/tclpkcs11-fossil/build/work {*}[glob -nocomplain -directory /opt/appfs/rkeene.org/tcllib/platform/latest/lib/ tcllib*]
-
-package provide pki 0.10
-catch {
-	source /home/rkeene/devel/tcllib-pki/pki.tcl
+if {[info exists ::env(SSH_AGENT_LIB_PATH)]} {
+	lappend auto_path {*}$::env(SSH_AGENT_LIB_PATH)
 }
-package require duktape
+
+if {[info exists ::env(SSH_AGENT_PKCS11_MODULE)]} {
+	set ::pkcs11ModuleFilename $::env(SSH_AGENT_PKCS11_MODULE)
+} else {
+	set ::pkcs11ModuleFilename /home/rkeene/tmp/cackey/build/tcl/softokn3-pkcs11.so
+}
+
+package require duktape 0.7
 package require tuapi
-package require pki::pkcs11
+package require pki 0.6
+package require pki::pkcs11 0.9.9
+
+## HACK: Fix up older versions of "pki" to include the raw certificate
+##       this is needed
+apply {{} {
+	set procToUpdate ::pki::x509::parse_cert
+	if {![string match "*set ret(raw)*" [info body $procToUpdate]]} {
+		set body [info body $procToUpdate]
+		set body [string map {
+			"::asn::asnGetSequence cert_seq wholething"
+			"set ret(raw) $cert_seq; binary scan $ret(raw) H* ret(raw); ::asn::asnGetSequence cert_seq wholething"
+		} $body]
+		proc $procToUpdate [info args $procToUpdate] $body
+	}
+}}
 
 proc pkcs11ModuleHandle {} {
 	if {![info exists ::pkcs11ModuleHandle]} {
-		set ::pkcs11ModuleHandle [::pki::pkcs11::loadmodule /home/rkeene/tmp/cackey/build/tcl/softokn3-pkcs11.so]
+		set ::pkcs11ModuleHandle [::pki::pkcs11::loadmodule $::pkcs11ModuleFilename]
 	}
 	return $::pkcs11ModuleHandle
 }
@@ -111,18 +130,21 @@ proc addRSAToJS {jsHandle} {
 	}
 }
 
-proc initSSHAgent {} {
-	foreach file {chrome-emu.js ssh-agent-noasync.js} {
-		unset -nocomplain fd
+proc readFile {fileName} {
+	if {![info exists ::readFile($fileName)]} {
 		catch {
-			set fd [open $file]
-			set js($file) [read $fd]
+			set fd [open $fileName]
+			set ::readFile($fileName) [read $fd]
 		}
 		catch {
 			close $fd
 		}
 	}
 
+	return $::readFile($fileName)
+}
+
+proc initSSHAgent {} {
 	set jsHandle [::duktape::init -safe true]
 
 	::duktape::tcl-function $jsHandle __puts {args} {
@@ -146,11 +168,12 @@ proc initSSHAgent {} {
 	}
 
 	::duktape::eval $jsHandle {var goog = {DEBUG: false};}
-	::duktape::eval $jsHandle $js(chrome-emu.js)
+	::duktape::eval $jsHandle [readFile chrome-emu.js]
 	addRSAToJS $jsHandle
-	::duktape::eval $jsHandle $js(ssh-agent-noasync.js)
+	::duktape::eval $jsHandle [readFile ssh-agent-noasync.js]
 	::duktape::eval $jsHandle {cackeySSHAgentFeatures.enabled = true;}
-	::duktape::eval $jsHandle {cackeySSHAgentFeatures.includeCerts = true;}
+	::duktape::eval $jsHandle {cackeySSHAgentFeatures.includeCerts = false;}
+	::duktape::eval $jsHandle {cackeySSHAgentFeatures.legacy = false;}
 	::duktape::eval $jsHandle {
 		function connection(callback) {
 			this.sender = {
@@ -340,7 +363,10 @@ proc handleData {sock jsHandle} {
 
 proc incomingConnection {sock args} {
 	if {[catch {
-		set jsHandle [initSSHAgent]
+		if {![info exists ::jsHandle]} {
+			set ::jsHandle [initSSHAgent]
+		}
+		set jsHandle $::jsHandle
 
 		::duktape::eval $jsHandle {var socket = new connection(handleDataFromAgent);}
 		::duktape::eval $jsHandle "socket.handle = \"$sock\";"
