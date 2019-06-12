@@ -93,7 +93,11 @@ function cackeySSHAgentEncodeBigInt(bigInt) {
 			result.reverse();
 			break;
 		case "object":
-			result = Array.from(new Uint8Array(bigInt.toByteArray()));
+			if (bigInt.toByteArray) {
+				result = Array.from(new Uint8Array(bigInt.toByteArray()));
+			} else {
+				result = Array.from(bigInt);
+			}
 			break;
 	}
 
