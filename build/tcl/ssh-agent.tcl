@@ -54,13 +54,17 @@ proc addRSAToJS {jsHandle} {
 
 		set e [format %llx [dict get $cert e]]
 		set n [format %llx [dict get $cert n]]
+
+		# Pad to even size for hex width
 		if {[string length $e] % 2 != 0} {
 			set e "0$e"
 		}
 		if {[string length $n] % 2 != 0} {
 			set n "0$n"
 		}
-		if {[string length $n] % 4 == 0} {
+
+		# Add a leading zero if the value is high enough
+		if {"0x[string range $n 0 1]" > 0x7f} {
 			set n "00$n"
 		}
 
