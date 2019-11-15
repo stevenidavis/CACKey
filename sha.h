@@ -70,7 +70,13 @@
  *
  */
 
-#include <stdint.h>
+#include "config.h"
+
+#ifdef HAVE_STDINT_H
+#  include <stdint.h>
+#elif defined(HAVE_INTTYPES_H)
+#  include <inttypes.h>
+#endif
 /*
  * If you do not have the ISO standard stdint.h header file, then you
  * must typedef the following:
