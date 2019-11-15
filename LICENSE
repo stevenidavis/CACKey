@@ -48,9 +48,9 @@ RSA Data Security, Inc., and are licensed under terms specified
 therein: md5.h, md5.c These files are "derived from the RSA Data
 Security, Inc. MD5 Message-Digest Algorithm".
 
-The following files in this directory are from RFC 3174, are the
-intellectual property of the Internet Society, and are licensed under
-terms specified therein: sha1.c, sha1.h
+The following files in this directory are from RFC 6234, are the
+intellectual property of the IETF Trust, and are licensed under
+the 3-clause BSD license: sha1.c, sha.h, sha-private.h
 
 The files in the "pkcs11/" directory are licensed under the terms of the
 following licenses:
