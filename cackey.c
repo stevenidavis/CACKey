@@ -64,7 +64,7 @@
 #include "pkcs11.h"
 #include "pkcs11n.h"
 #include "asn1-x509.h"
-#include "sha1.h"
+#include "sha.h"
 #include "md5.h"
 
 #ifndef CACKEY_CRYPTOKI_VERSION_CODE

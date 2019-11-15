@@ -24,10 +24,10 @@ static:
 	$(MAKE) libcackey.a
 	-$(MAKE) libcackey_g.a
 
-cackey.o: cackey.c cackey_builtin_certs.h sha1.c sha1.h md5.c md5.h asn1-x509.c asn1-x509.h config.h
+cackey.o: cackey.c cackey_builtin_certs.h sha1.c sha.h sha-private.h md5.c md5.h asn1-x509.c asn1-x509.h config.h
 	$(CC) $(SHOBJFLAGS) $(CPPFLAGS) $(CFLAGS) -o cackey.o -c cackey.c
 
-cackey_g.o: cackey.c cackey_builtin_certs.h sha1.c sha1.h md5.c md5.h asn1-x509.c asn1-x509.h config.h
+cackey_g.o: cackey.c cackey_builtin_certs.h sha1.c sha.h sha-private.h md5.c md5.h asn1-x509.c asn1-x509.h config.h
 	$(CC) $(SHOBJFLAGS) $(DEBUGCPPFLAGS) $(DEBUGCFLAGS) -o cackey_g.o -c cackey.c
 
 libcackey.@SHOBJEXT@: cackey.o
@@ -69,7 +69,7 @@ test-afl.data: test
 			done \
 		)" > test-afl.data; rm -f $${tmpLogFile}
 
-test-afl: test-afl.data test.c cackey.c cackey_builtin_certs.h sha1.c sha1.h md5.c md5.h asn1-x509.c asn1-x509.h config.h
+test-afl: test-afl.data test.c cackey.c cackey_builtin_certs.h sha1.c sha.h sha-private.h md5.c md5.h asn1-x509.c asn1-x509.h config.h
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -DCACKEY_TEST_AFL -o test-afl test.c $(patsubst -lpcsclite,,$(LIBS))
 
 splint-cackey.txt: cackey.c cackey_builtin_certs.h asn1-x509.c asn1-x509.h config.h
