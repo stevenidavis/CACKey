@@ -6,6 +6,7 @@ Description:
 	Interoperability Specification (GSC-IS) v2.1 or newer.  
 
 Compiling:
+	$ sh autogen.sh
 	$ ./configure
 	$ make
 	# make install
